@@ -18,6 +18,12 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - Zod for validation
 - Swagger for automatic api documentation
 
+## Guidelines
+- Write simple unit tests for each system you implement that can be run easily without messing up the real database or having to be connected to internet
+- The project structure should have a src directory which consists of `/db`, `/components`, `/realtime`, `/lib`. for example an auth service and router should reside in `src/components/auth`
+- Make sure each router in components is in a separate file than it's service
+- You can setup middlewares to make your job easier for zod validation of requests
+
 ## Details
 
 ### Authentication system
@@ -26,3 +32,4 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - For signing in, only an email and password is needed
 - It should follow basic oauth2 using access token, referesh token and jwt
 - There should be sign-out route as well
+- Auth should have middlewares that can be used on other routes to make sure the user is authenticated
