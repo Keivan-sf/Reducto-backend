@@ -23,6 +23,8 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - The project structure should have a src directory which consists of `/db`, `/components`, `/realtime`, `/lib`. for example an auth service and router should reside in `src/components/auth`
 - Make sure each router in components is in a separate file than it's service
 - You can setup middlewares to make your job easier for zod validation of requests
+- Use prettier for formatting
+- For an s3 bucket or database make sure there is a simple docker compose setup for testing
 
 ## Details
 
