@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { MulterError } from "multer";
 import type { ZodType } from "zod";
 
 export class HttpError extends Error {
@@ -30,6 +31,10 @@ export function errorHandler(
 	response: Response,
 	_next: NextFunction,
 ) {
+	if (error instanceof MulterError) {
+		response.status(400).json({ error: "Avatar must not exceed 5 MB" });
+		return;
+	}
 	if (error instanceof HttpError) {
 		response.status(error.status).json({ error: error.message });
 		return;

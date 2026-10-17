@@ -17,6 +17,7 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - Socket.io for realtime notifications
 - Zod for validation
 - Swagger for automatic api documentation
+- Use jest for tests
 
 ## Guidelines
 - Write simple unit tests for each system you implement that can be run easily without messing up the real database or having to be connected to internet
@@ -35,3 +36,9 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - It should follow basic oauth2 using access token, referesh token and jwt
 - There should be sign-out route as well
 - Auth should have middlewares that can be used on other routes to make sure the user is authenticated
+
+### Settings
+- Users should be able to change their name and username
+- Users should be able to setup or change their avatar.
+- Avatar is only accepted if the image aspect ratio is 1:1 and the image is not too large
+- Avatar is stored in a different folder on the object storage

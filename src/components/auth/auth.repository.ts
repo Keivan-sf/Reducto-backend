@@ -6,6 +6,9 @@ import { refreshTokens, users } from "../../db/schema.js";
 export type AuthUser = {
 	id: string;
 	email: string;
+	name: string;
+	username: string | null;
+	avatarKey: string | null;
 	passwordHash: string;
 	createdAt: Date;
 };
@@ -18,8 +21,14 @@ export type RefreshSession = {
 
 export interface AuthRepository {
 	findUserByEmail(email: string): Promise<AuthUser | undefined>;
+	findUserByUsername(username: string): Promise<AuthUser | undefined>;
 	findUserById(id: string): Promise<AuthUser | undefined>;
-	createUser(email: string, passwordHash: string): Promise<AuthUser>;
+	createUser(user: {
+		email: string;
+		name: string;
+		username?: string;
+		passwordHash: string;
+	}): Promise<AuthUser>;
 	createSession(session: RefreshSession): Promise<void>;
 	findSession(id: string): Promise<RefreshSession | undefined>;
 	deleteSession(id: string): Promise<void>;
@@ -37,14 +46,28 @@ export class InMemoryAuthRepository implements AuthRepository {
 		return [...this.userRecords.values()].find((user) => user.email === email);
 	}
 
+	async findUserByUsername(username: string) {
+		return [...this.userRecords.values()].find(
+			(user) => user.username === username,
+		);
+	}
+
 	async findUserById(id: string) {
 		return this.userRecords.get(id);
 	}
 
-	async createUser(email: string, passwordHash: string) {
+	async createUser({
+		email,
+		name,
+		username,
+		passwordHash,
+	}: Parameters<AuthRepository["createUser"]>[0]) {
 		const user = {
 			id: randomUUID(),
 			email,
+			name,
+			username: username ?? null,
+			avatarKey: null,
 			passwordHash,
 			createdAt: new Date(),
 		};
@@ -74,16 +97,22 @@ export class DrizzleAuthRepository implements AuthRepository {
 		});
 	}
 
+	async findUserByUsername(username: string) {
+		return this.database.query.users.findFirst({
+			where: eq(users.username, username),
+		});
+	}
+
 	async findUserById(id: string) {
 		return this.database.query.users.findFirst({ where: eq(users.id, id) });
 	}
 
-	async createUser(email: string, passwordHash: string) {
-		const [user] = await this.database
+	async createUser(user: Parameters<AuthRepository["createUser"]>[0]) {
+		const [createdUser] = await this.database
 			.insert(users)
-			.values({ email, passwordHash })
+			.values(user)
 			.returning();
-		return user;
+		return createdUser;
 	}
 
 	async createSession(session: RefreshSession) {

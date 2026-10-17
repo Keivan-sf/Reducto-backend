@@ -1,0 +1,47 @@
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
+export interface ObjectStorage {
+	putObject(input: {
+		key: string;
+		body: Buffer;
+		contentType: string;
+	}): Promise<void>;
+}
+
+type S3ObjectStorageConfig = {
+	endpoint: string;
+	bucket: string;
+	accessKeyId: string;
+	secretAccessKey: string;
+};
+
+export class S3ObjectStorage implements ObjectStorage {
+	private readonly client: S3Client;
+
+	constructor(private readonly config: S3ObjectStorageConfig) {
+		this.client = new S3Client({
+			endpoint: config.endpoint,
+			region: "us-east-1",
+			forcePathStyle: true,
+			credentials: {
+				accessKeyId: config.accessKeyId,
+				secretAccessKey: config.secretAccessKey,
+			},
+		});
+	}
+
+	async putObject(input: {
+		key: string;
+		body: Buffer;
+		contentType: string;
+	}): Promise<void> {
+		await this.client.send(
+			new PutObjectCommand({
+				Bucket: this.config.bucket,
+				Key: input.key,
+				Body: input.body,
+				ContentType: input.contentType,
+			}),
+		);
+	}
+}

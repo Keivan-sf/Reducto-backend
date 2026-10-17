@@ -8,6 +8,20 @@
 			"when": 1792217632065,
 			"tag": "0000_quiet_lionheart",
 			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1792219990921,
+			"tag": "0001_last_wallow",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1792221839254,
+			"tag": "0002_aberrant_ironclad",
+			"breakpoints": true
 		}
 	]
 }

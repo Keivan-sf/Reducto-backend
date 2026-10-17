@@ -28,14 +28,25 @@ export class AuthService {
 	async signUp(
 		email: string,
 		password: string,
+		name: string,
+		username?: string,
 	): Promise<{ user: AuthUser; tokens: TokenPair }> {
 		const normalizedEmail = email.trim().toLowerCase();
+		const normalizedUsername = username?.toLowerCase();
 		if (await this.repository.findUserByEmail(normalizedEmail))
 			throw new HttpError(409, "Email is already registered");
-		const user = await this.repository.createUser(
-			normalizedEmail,
-			await hashPassword(password),
-		);
+		if (
+			normalizedUsername &&
+			(await this.repository.findUserByUsername(normalizedUsername))
+		) {
+			throw new HttpError(409, "Username is already registered");
+		}
+		const user = await this.repository.createUser({
+			email: normalizedEmail,
+			name: name.trim(),
+			username: normalizedUsername,
+			passwordHash: await hashPassword(password),
+		});
 		return { user, tokens: await this.issueTokens(user.id) };
 	}
 

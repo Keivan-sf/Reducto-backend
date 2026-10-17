@@ -2,8 +2,13 @@ import express from "express";
 import { errorHandler } from "./lib/http.js";
 import { createAuthRouter } from "./components/auth/auth.router.js";
 import type { AuthService } from "./components/auth/auth.service.js";
+import { createSettingsRouter } from "./components/settings/settings.router.js";
+import type { SettingsService } from "./components/settings/settings.service.js";
 
-export function createApp(authService: AuthService) {
+export function createApp(
+	authService: AuthService,
+	settingsService: SettingsService,
+) {
 	const app = express();
 	app.use(express.json({ limit: "1mb" }));
 	app.get("/health", (_request, response) => response.json({ status: "ok" }));
@@ -22,6 +27,18 @@ export function createApp(authService: AuthService) {
 						security: [{ bearerAuth: [] }],
 					},
 				},
+				"/api/settings/profile": {
+					patch: {
+						summary: "Update the authenticated user's name or username",
+						security: [{ bearerAuth: [] }],
+					},
+				},
+				"/api/settings/avatar": {
+					put: {
+						summary: "Upload a square avatar for the authenticated user",
+						security: [{ bearerAuth: [] }],
+					},
+				},
 			},
 			components: {
 				securitySchemes: {
@@ -31,6 +48,7 @@ export function createApp(authService: AuthService) {
 		}),
 	);
 	app.use("/api/auth", createAuthRouter(authService));
+	app.use("/api/settings", createSettingsRouter(authService, settingsService));
 	app.use(errorHandler);
 	return app;
 }
