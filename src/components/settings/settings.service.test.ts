@@ -1,6 +1,6 @@
 import { expect, test } from "@jest/globals";
 import sharp from "sharp";
-import type { ObjectStorage } from "./object-storage.js";
+import type { ObjectStorage } from "../../lib/object-storage.js";
 import {
 	InMemorySettingsRepository,
 	type SettingsUser,
@@ -15,6 +15,10 @@ class InMemoryObjectStorage implements ObjectStorage {
 			body: input.body,
 			contentType: input.contentType,
 		});
+	}
+
+	async deleteObject(key: string) {
+		this.objects.delete(key);
 	}
 }
 

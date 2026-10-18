@@ -20,6 +20,7 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - Use jest for tests
 
 ## Guidelines
+
 - Write simple unit tests for each system you implement that can be run easily without messing up the real database or having to be connected to internet
 - The project structure should have a src directory which consists of `/db`, `/components`, `/realtime`, `/lib`. for example an auth service and router should reside in `src/components/auth`
 - Make sure each router in components is in a separate file than it's service
@@ -38,7 +39,30 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - Auth should have middlewares that can be used on other routes to make sure the user is authenticated
 
 ### Settings
+
 - Users should be able to change their name and username
 - Users should be able to setup or change their avatar.
 - Avatar is only accepted if the image aspect ratio is 1:1 and the image is not too large
 - Avatar is stored in a different folder on the object storage
+
+### Gif system
+
+- Users can upload gifs or videos to be stored as gifs. but in reality on the backend all of the gifs (and videos that are uploaded to be gifs) are converted and stored as muted mp4s. Use ffmpeg for this.
+- There should be a limit of 50mb filesize for gifs
+- When a gif is uploaded, it will have it's own id and record on the database and it's mp4 file should be stored on a suitable folder on the object storage
+- A user can add gifs to their gif library. Meaning there should be a route where a user may provide a gif id and add that gif id to their library. and another route where user can request and see all the gif id's in their library
+- A user can also remove gifs from their gif library
+- When a user upload a gif themselves, it should automatically be added to their library after the gif is successfully uploaded and stored
+
+### Private chats / conversations
+
+- A user can message another user therefore creating a conversation
+- Sending a message should be done using http apis but notifications (new messages etc.) should be sent over web sockets using socket.io.
+- A message can have text, and attatchment. A message can at most have one attatchment at a time. an attatchment can be of the following types: 1.image 2.video 3.audio 4.gif 5.music 6.document(basically any other filetype)
+- It's obvious that if the message attatchment is a gif, it should just consist of the gif id
+
+### Groups
+
+- Users can create groups (and they will be the owner of the group)
+- Owners of a group can make other users admin of the group which have the same capablities as the owner except they can't make other users admin and they can't delete the group
+- Each group should have a unique invite link that if a user clicks on, they will automatically join the group

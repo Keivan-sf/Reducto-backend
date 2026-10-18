@@ -32,7 +32,9 @@ export function errorHandler(
 	_next: NextFunction,
 ) {
 	if (error instanceof MulterError) {
-		response.status(400).json({ error: "Avatar must not exceed 5 MB" });
+		response
+			.status(400)
+			.json({ error: "Uploaded file exceeds the permitted size" });
 		return;
 	}
 	if (error instanceof HttpError) {

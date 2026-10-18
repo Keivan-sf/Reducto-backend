@@ -1,4 +1,8 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+	DeleteObjectCommand,
+	PutObjectCommand,
+	S3Client,
+} from "@aws-sdk/client-s3";
 
 export interface ObjectStorage {
 	putObject(input: {
@@ -6,9 +10,10 @@ export interface ObjectStorage {
 		body: Buffer;
 		contentType: string;
 	}): Promise<void>;
+	deleteObject(key: string): Promise<void>;
 }
 
-type S3ObjectStorageConfig = {
+export type S3ObjectStorageConfig = {
 	endpoint: string;
 	bucket: string;
 	accessKeyId: string;
@@ -42,6 +47,12 @@ export class S3ObjectStorage implements ObjectStorage {
 				Body: input.body,
 				ContentType: input.contentType,
 			}),
+		);
+	}
+
+	async deleteObject(key: string): Promise<void> {
+		await this.client.send(
+			new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }),
 		);
 	}
 }

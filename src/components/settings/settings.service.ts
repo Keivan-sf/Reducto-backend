@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { HttpError } from "../../lib/http.js";
-import type { ObjectStorage } from "./object-storage.js";
+import type { ObjectStorage } from "../../lib/object-storage.js";
 import type {
 	SettingsRepository,
 	SettingsUser,

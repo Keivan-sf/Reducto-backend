@@ -4,10 +4,13 @@ import { createAuthRouter } from "./components/auth/auth.router.js";
 import type { AuthService } from "./components/auth/auth.service.js";
 import { createSettingsRouter } from "./components/settings/settings.router.js";
 import type { SettingsService } from "./components/settings/settings.service.js";
+import { createGifRouter } from "./components/gifs/gif.router.js";
+import type { GifService } from "./components/gifs/gif.service.js";
 
 export function createApp(
 	authService: AuthService,
 	settingsService: SettingsService,
+	gifService: GifService,
 ) {
 	const app = express();
 	app.use(express.json({ limit: "1mb" }));
@@ -39,6 +42,26 @@ export function createApp(
 						security: [{ bearerAuth: [] }],
 					},
 				},
+				"/api/gifs": {
+					get: {
+						summary: "List the authenticated user's stored GIFs",
+						security: [{ bearerAuth: [] }],
+					},
+					post: {
+						summary: "Upload a GIF or video (max 50 MB), stored as muted MP4",
+						security: [{ bearerAuth: [] }],
+					},
+				},
+				"/api/gifs/{gifId}": {
+					put: {
+						summary: "Add an existing GIF to the authenticated user's library",
+						security: [{ bearerAuth: [] }],
+					},
+					delete: {
+						summary: "Remove a GIF from the authenticated user's library",
+						security: [{ bearerAuth: [] }],
+					},
+				},
 			},
 			components: {
 				securitySchemes: {
@@ -49,6 +72,7 @@ export function createApp(
 	);
 	app.use("/api/auth", createAuthRouter(authService));
 	app.use("/api/settings", createSettingsRouter(authService, settingsService));
+	app.use("/api/gifs", createGifRouter(authService, gifService));
 	app.use(errorHandler);
 	return app;
 }

@@ -4,9 +4,11 @@ import { createApp } from "./app.js";
 import { createDatabase } from "./db/client.js";
 import { DrizzleAuthRepository } from "./components/auth/auth.repository.js";
 import { AuthService } from "./components/auth/auth.service.js";
-import { S3ObjectStorage } from "./components/settings/object-storage.js";
+import { S3ObjectStorage } from "./lib/object-storage.js";
 import { DrizzleSettingsRepository } from "./components/settings/settings.repository.js";
 import { SettingsService } from "./components/settings/settings.service.js";
+import { DrizzleGifRepository } from "./components/gifs/gif.repository.js";
+import { GifService } from "./components/gifs/gif.service.js";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -30,16 +32,22 @@ const authService = new AuthService(new DrizzleAuthRepository(database), {
 	accessTokenLifetimeSeconds: 15 * 60,
 	refreshTokenLifetimeSeconds: 30 * 24 * 60 * 60,
 });
+const objectStorage = new S3ObjectStorage({
+	endpoint: environment.S3_ENDPOINT,
+	bucket: environment.S3_BUCKET,
+	accessKeyId: environment.S3_ACCESS_KEY,
+	secretAccessKey: environment.S3_SECRET_KEY,
+});
 const settingsService = new SettingsService(
 	new DrizzleSettingsRepository(database),
-	new S3ObjectStorage({
-		endpoint: environment.S3_ENDPOINT,
-		bucket: environment.S3_BUCKET,
-		accessKeyId: environment.S3_ACCESS_KEY,
-		secretAccessKey: environment.S3_SECRET_KEY,
-	}),
+	objectStorage,
+);
+const gifService = new GifService(
+	new DrizzleGifRepository(database),
+	objectStorage,
 );
 
-createApp(authService, settingsService).listen(environment.PORT, () =>
-	console.log(`Reducto API listening on port ${environment.PORT}`),
+createApp(authService, settingsService, gifService).listen(
+	environment.PORT,
+	() => console.log(`Reducto API listening on port ${environment.PORT}`),
 );
