@@ -32,9 +32,12 @@ export function errorHandler(
 	_next: NextFunction,
 ) {
 	if (error instanceof MulterError) {
-		response
-			.status(400)
-			.json({ error: "Uploaded file exceeds the permitted size" });
+		response.status(400).json({
+			error:
+				error.code === "LIMIT_FILE_SIZE"
+					? "Uploaded file exceeds the permitted size"
+					: "Invalid multipart upload",
+		});
 		return;
 	}
 	if (error instanceof HttpError) {

@@ -54,15 +54,17 @@ This is a backend for a messaging app. It is kind of a Telegram clone.
 - A user can also remove gifs from their gif library
 - When a user upload a gif themselves, it should automatically be added to their library after the gif is successfully uploaded and stored
 
-### Private chats / conversations
+### Chats / conversations
 
 - A user can message another user therefore creating a conversation
 - Sending a message should be done using http apis but notifications (new messages etc.) should be sent over web sockets using socket.io.
-- A message can have text, and attatchment. A message can at most have one attatchment at a time. an attatchment can be of the following types: 1.image 2.video 3.audio 4.gif 5.music 6.document(basically any other filetype)
+- A message can have text, and attatchment. A message can at most have one attatchment. an attatchment can be of the following types: 1.image 2.video 3.audio 4.gif 5.music 6.document(basically any other filetype)
 - It's obvious that if the message attatchment is a gif, it should just consist of the gif id
+- Messages can be forwarded from other users from other chats just like telegram
+- Messages can have reactions. Just like discord or telegram. There should be a hard coded defined set of emojis which users can use for reaction
 
-### Groups
-
+#### Groups
+- Groups are type of conversation where multiple people can be in it at the same time
 - Users can create groups (and they will be the owner of the group)
 - Owners of a group can make other users admin of the group which have the same capablities as the owner except they can't make other users admin and they can't delete the group
 - Each group should have a unique invite link that if a user clicks on, they will automatically join the group

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { existsSync } from "node:fs";
+import { createServer } from "node:http";
+import { Server } from "socket.io";
 import { createApp } from "./app.js";
 import { createDatabase } from "./db/client.js";
 import { DrizzleAuthRepository } from "./components/auth/auth.repository.js";
@@ -9,6 +11,9 @@ import { DrizzleSettingsRepository } from "./components/settings/settings.reposi
 import { SettingsService } from "./components/settings/settings.service.js";
 import { DrizzleGifRepository } from "./components/gifs/gif.repository.js";
 import { GifService } from "./components/gifs/gif.service.js";
+import { DrizzleConversationRepository } from "./components/conversations/conversation.repository.js";
+import { ConversationService } from "./components/conversations/conversation.service.js";
+import { attachRealtime, SocketNotifications } from "./realtime/socket.js";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -47,7 +52,16 @@ const gifService = new GifService(
 	objectStorage,
 );
 
-createApp(authService, settingsService, gifService).listen(
-	environment.PORT,
-	() => console.log(`Reducto API listening on port ${environment.PORT}`),
+const io = new Server();
+const conversationService = new ConversationService(
+	new DrizzleConversationRepository(database),
+	objectStorage,
+	new SocketNotifications(io),
+);
+const server = createServer(
+	createApp(authService, settingsService, gifService, conversationService),
+);
+attachRealtime(server, authService, io);
+server.listen(environment.PORT, () =>
+	console.log(`Reducto API listening on port ${environment.PORT}`),
 );

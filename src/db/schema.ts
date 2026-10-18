@@ -1,5 +1,8 @@
 import {
 	integer,
+	index,
+	jsonb,
+	pgEnum,
 	pgTable,
 	primaryKey,
 	text,
@@ -57,4 +60,124 @@ export const userGifs = pgTable(
 			.notNull(),
 	},
 	(table) => [primaryKey({ columns: [table.userId, table.gifId] })],
+);
+
+export const conversationType = pgEnum("conversation_type", [
+	"private",
+	"group",
+]);
+export const memberRole = pgEnum("member_role", ["owner", "admin", "member"]);
+export const mediaType = pgEnum("media_type", [
+	"image",
+	"video",
+	"audio",
+	"music",
+	"document",
+]);
+export const reactionEmoji = pgEnum("reaction_emoji", [
+	"👍",
+	"👎",
+	"❤️",
+	"😂",
+	"😮",
+	"😢",
+	"🔥",
+	"🎉",
+]);
+
+export const conversations = pgTable("conversations", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	type: conversationType("type").notNull(),
+	name: text("name"),
+	privateKey: text("private_key").unique(),
+	inviteToken: text("invite_token").unique(),
+	createdAt: timestamp("created_at", { withTimezone: true })
+		.defaultNow()
+		.notNull(),
+});
+
+export const conversationMembers = pgTable(
+	"conversation_members",
+	{
+		conversationId: uuid("conversation_id")
+			.notNull()
+			.references(() => conversations.id, { onDelete: "cascade" }),
+		userId: uuid("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		role: memberRole("role").notNull().default("member"),
+		joinedAt: timestamp("joined_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.conversationId, table.userId] }),
+		index("members_user_idx").on(table.userId),
+	],
+);
+
+export const conversationMedia = pgTable("conversation_media", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	conversationId: uuid("conversation_id")
+		.notNull()
+		.references(() => conversations.id, { onDelete: "cascade" }),
+	uploaderId: uuid("uploader_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "restrict" }),
+	type: mediaType("type").notNull(),
+	objectKey: text("object_key").notNull(),
+	fileName: text("file_name").notNull(),
+	contentType: text("content_type").notNull(),
+	fileSize: integer("file_size").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true })
+		.defaultNow()
+		.notNull(),
+});
+
+export const messages = pgTable(
+	"messages",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		conversationId: uuid("conversation_id")
+			.notNull()
+			.references(() => conversations.id, { onDelete: "cascade" }),
+		senderId: uuid("sender_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		text: text("text"),
+		attachment:
+			jsonb("attachment").$type<
+				import("../components/conversations/conversation.types.js").Attachment
+			>(),
+		forwardedFrom:
+			jsonb("forwarded_from").$type<
+				import("../components/conversations/conversation.types.js").ForwardOrigin
+			>(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		index("messages_conversation_created_idx").on(
+			table.conversationId,
+			table.createdAt,
+			table.id,
+		),
+	],
+);
+
+export const messageReactions = pgTable(
+	"message_reactions",
+	{
+		messageId: uuid("message_id")
+			.notNull()
+			.references(() => messages.id, { onDelete: "cascade" }),
+		userId: uuid("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		emoji: reactionEmoji("emoji").notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.messageId, table.userId, table.emoji] }),
+	],
 );

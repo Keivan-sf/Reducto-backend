@@ -6,11 +6,19 @@ import { createSettingsRouter } from "./components/settings/settings.router.js";
 import type { SettingsService } from "./components/settings/settings.service.js";
 import { createGifRouter } from "./components/gifs/gif.router.js";
 import type { GifService } from "./components/gifs/gif.service.js";
+import { createConversationRouter } from "./components/conversations/conversation.router.js";
+import { createGroupRouter } from "./components/groups/group.router.js";
+import type { ConversationService } from "./components/conversations/conversation.service.js";
+import {
+	chatPaths,
+	chatSchemas,
+} from "./components/conversations/conversation.openapi.js";
 
 export function createApp(
 	authService: AuthService,
 	settingsService: SettingsService,
 	gifService: GifService,
+	conversationService: ConversationService,
 ) {
 	const app = express();
 	app.use(express.json({ limit: "1mb" }));
@@ -20,6 +28,7 @@ export function createApp(
 			openapi: "3.0.3",
 			info: { title: "Reducto API", version: "1.0.0" },
 			paths: {
+				...chatPaths,
 				"/api/auth/sign-up": { post: { summary: "Create an account" } },
 				"/api/auth/sign-in": { post: { summary: "Sign in" } },
 				"/api/auth/refresh": { post: { summary: "Rotate a refresh token" } },
@@ -64,6 +73,7 @@ export function createApp(
 				},
 			},
 			components: {
+				schemas: chatSchemas,
 				securitySchemes: {
 					bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
 				},
@@ -73,6 +83,11 @@ export function createApp(
 	app.use("/api/auth", createAuthRouter(authService));
 	app.use("/api/settings", createSettingsRouter(authService, settingsService));
 	app.use("/api/gifs", createGifRouter(authService, gifService));
+	app.use(
+		"/api/conversations",
+		createConversationRouter(authService, conversationService),
+	);
+	app.use("/api/groups", createGroupRouter(authService, conversationService));
 	app.use(errorHandler);
 	return app;
 }

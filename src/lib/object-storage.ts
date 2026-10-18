@@ -1,5 +1,6 @@
 import {
 	DeleteObjectCommand,
+	GetObjectCommand,
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
@@ -54,5 +55,13 @@ export class S3ObjectStorage implements ObjectStorage {
 		await this.client.send(
 			new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }),
 		);
+	}
+
+	async getObject(key: string): Promise<Buffer> {
+		const response = await this.client.send(
+			new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+		);
+		if (!response.Body) throw new Error("Stored attachment has no body");
+		return Buffer.from(await response.Body.transformToByteArray());
 	}
 }
