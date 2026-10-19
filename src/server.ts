@@ -14,6 +14,8 @@ import { GifService } from "./components/gifs/gif.service.js";
 import { DrizzleConversationRepository } from "./components/conversations/conversation.repository.js";
 import { ConversationService } from "./components/conversations/conversation.service.js";
 import { attachRealtime, SocketNotifications } from "./realtime/socket.js";
+import { DrizzleUserRepository } from "./components/users/user.repository.js";
+import { UserService } from "./components/users/user.service.js";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -59,7 +61,13 @@ const conversationService = new ConversationService(
 	new SocketNotifications(io),
 );
 const server = createServer(
-	createApp(authService, settingsService, gifService, conversationService),
+	createApp(
+		authService,
+		settingsService,
+		gifService,
+		conversationService,
+		new UserService(new DrizzleUserRepository(database), objectStorage),
+	),
 );
 attachRealtime(server, authService, io);
 server.listen(environment.PORT, () =>

@@ -13,12 +13,16 @@ import {
 	chatPaths,
 	chatSchemas,
 } from "./components/conversations/conversation.openapi.js";
+import type { UserService } from "./components/users/user.service.js";
+import { createUserRouter } from "./components/users/user.router.js";
+import { userPaths, userSchemas } from "./components/users/user.openapi.js";
 
 export function createApp(
 	authService: AuthService,
 	settingsService: SettingsService,
 	gifService: GifService,
 	conversationService: ConversationService,
+	userService: UserService,
 ) {
 	const app = express();
 	app.use(express.json({ limit: "1mb" }));
@@ -29,6 +33,7 @@ export function createApp(
 			info: { title: "Reducto API", version: "1.0.0" },
 			paths: {
 				...chatPaths,
+				...userPaths,
 				"/api/auth/sign-up": { post: { summary: "Create an account" } },
 				"/api/auth/sign-in": { post: { summary: "Sign in" } },
 				"/api/auth/refresh": { post: { summary: "Rotate a refresh token" } },
@@ -73,7 +78,7 @@ export function createApp(
 				},
 			},
 			components: {
-				schemas: chatSchemas,
+				schemas: { ...chatSchemas, ...userSchemas },
 				securitySchemes: {
 					bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
 				},
@@ -81,6 +86,7 @@ export function createApp(
 		}),
 	);
 	app.use("/api/auth", createAuthRouter(authService));
+	app.use("/api/users", createUserRouter(authService, userService));
 	app.use("/api/settings", createSettingsRouter(authService, settingsService));
 	app.use("/api/gifs", createGifRouter(authService, gifService));
 	app.use(

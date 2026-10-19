@@ -20,6 +20,30 @@ Existing stored files are not converted retroactively.
 Run offline tests with `pnpm test`, typecheck with `pnpm run typecheck`, and format
 code with `pnpm run format`.
 
+## User profiles
+
+Authenticated lookups return basic details for any user:
+
+- `GET /api/users/:userId`
+- `GET /api/users/by-username/:username` (case-insensitive)
+
+```json
+{
+	"user": {
+		"id": "<user UUID>",
+		"name": "Display name",
+		"username": "some_user",
+		"avatarUrl": "<presigned avatar URL>"
+	}
+}
+```
+
+`name` is the display name. `username` and `avatarUrl` are null when unset.
+Avatar URLs can be used directly by image clients and expire after 15 minutes;
+fetch the profile again to refresh them. `S3_ENDPOINT` must be reachable from the
+client using the URL. Responses exclude email addresses, password hashes, and
+storage keys. Malformed IDs/usernames return `400`; missing users return `404`.
+
 ## Conversations and messages
 
 All chat and group HTTP endpoints require `Authorization: Bearer <accessToken>`.
@@ -27,20 +51,20 @@ Users can only read, send, react, upload, and download in conversations they bel
 to. Group members can read the group's existing history when they join. Removed
 members immediately lose access to future requests and notifications.
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/conversations` | List my private chats and groups |
-| POST | `/api/conversations/private` | Create/reuse a private chat with `{ "username": "alice" }` or `{ "userId": "..." }` (exactly one) |
-| POST | `/api/conversations/private/:userId/messages` | Send a message and create/reuse the chat |
-| POST | `/api/conversations/private/by-username/:username/messages` | Send a message by username and create/reuse the chat |
-| GET | `/api/conversations/:id` | Read a conversation |
-| GET | `/api/conversations/:id/members` | List participants and roles |
-| GET | `/api/conversations/:id/messages?limit=50&before=messageId` | History, newest first; use `nextCursor` for the next page |
-| POST | `/api/conversations/:id/messages` | Send text and/or one attachment |
-| POST | `/api/conversations/:id/forward` | Forward `{ "messageId": "..." }` from a chat I can access |
-| POST | `/api/conversations/:id/attachments` | Upload multipart `file`, optionally `kind=music` |
-| GET | `/api/conversations/:id/attachments/:mediaId` | Download an attachment |
-| PUT / DELETE | `/api/conversations/:id/messages/:messageId/reactions` | Add/remove my `{ "emoji": "👍" }` reaction |
+| Method       | Endpoint                                                    | Purpose                                                                                           |
+| ------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| GET          | `/api/conversations`                                        | List my private chats and groups                                                                  |
+| POST         | `/api/conversations/private`                                | Create/reuse a private chat with `{ "username": "alice" }` or `{ "userId": "..." }` (exactly one) |
+| POST         | `/api/conversations/private/:userId/messages`               | Send a message and create/reuse the chat                                                          |
+| POST         | `/api/conversations/private/by-username/:username/messages` | Send a message by username and create/reuse the chat                                              |
+| GET          | `/api/conversations/:id`                                    | Read a conversation                                                                               |
+| GET          | `/api/conversations/:id/members`                            | List participants and roles                                                                       |
+| GET          | `/api/conversations/:id/messages?limit=50&before=messageId` | History, newest first; use `nextCursor` for the next page                                         |
+| POST         | `/api/conversations/:id/messages`                           | Send text and/or one attachment                                                                   |
+| POST         | `/api/conversations/:id/forward`                            | Forward `{ "messageId": "..." }` from a chat I can access                                         |
+| POST         | `/api/conversations/:id/attachments`                        | Upload multipart `file`, optionally `kind=music`                                                  |
+| GET          | `/api/conversations/:id/attachments/:mediaId`               | Download an attachment                                                                            |
+| PUT / DELETE | `/api/conversations/:id/messages/:messageId/reactions`      | Add/remove my `{ "emoji": "👍" }` reaction                                                        |
 
 Usernames are case-insensitive: `Alice` and `alice` resolve to the same user.
 Username and user ID lookups reuse the same private conversation. Changing a
@@ -58,7 +82,10 @@ Message bodies accept `text` (up to 10,000 characters) and a single `attachment`
 ```
 
 ```json
-{ "text": "Photo", "attachment": { "type": "image", "mediaId": "<uploaded attachment UUID>" } }
+{
+	"text": "Photo",
+	"attachment": { "type": "image", "mediaId": "<uploaded attachment UUID>" }
+}
 ```
 
 For non-GIF attachments, first upload the file to the destination conversation,
@@ -76,17 +103,17 @@ reactions; adding the same reaction twice is idempotent.
 
 ## Groups
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/groups` | Create `{ "name": "My group" }`; creator becomes owner |
-| GET / POST | `/api/groups/join/:token` | Join using the returned `inviteLink` (authentication required) |
-| GET | `/api/groups/:id/invite` | Owner/admin: retrieve the invite link |
-| PATCH | `/api/groups/:id` | Owner/admin: rename with `{ "name": "New name" }` |
-| POST | `/api/groups/:id/members` | Owner/admin: add `{ "userId": "..." }` |
-| PATCH | `/api/groups/:id/members/:userId` | Owner only: set `{ "role": "admin" }` or `"member"` |
-| DELETE | `/api/groups/:id/members/:userId` | Owner/admin: remove a member; owner cannot be removed |
-| POST | `/api/groups/:id/leave` | Leave a group; owner must delete it instead |
-| DELETE | `/api/groups/:id` | Owner only: delete the group and its message history |
+| Method     | Endpoint                          | Purpose                                                        |
+| ---------- | --------------------------------- | -------------------------------------------------------------- |
+| POST       | `/api/groups`                     | Create `{ "name": "My group" }`; creator becomes owner         |
+| GET / POST | `/api/groups/join/:token`         | Join using the returned `inviteLink` (authentication required) |
+| GET        | `/api/groups/:id/invite`          | Owner/admin: retrieve the invite link                          |
+| PATCH      | `/api/groups/:id`                 | Owner/admin: rename with `{ "name": "New name" }`              |
+| POST       | `/api/groups/:id/members`         | Owner/admin: add `{ "userId": "..." }`                         |
+| PATCH      | `/api/groups/:id/members/:userId` | Owner only: set `{ "role": "admin" }` or `"member"`            |
+| DELETE     | `/api/groups/:id/members/:userId` | Owner/admin: remove a member; owner cannot be removed          |
+| POST       | `/api/groups/:id/leave`           | Leave a group; owner must delete it instead                    |
+| DELETE     | `/api/groups/:id`                 | Owner only: delete the group and its message history           |
 
 ## Realtime notifications
 
@@ -103,14 +130,14 @@ Connections disconnect at token expiry; refresh the token over HTTP and reconnec
 Events are delivered to currently connected participants and are not queued for
 offline users; retrieve persisted history through HTTP after reconnecting.
 
-| Event | Payload |
-| --- | --- |
-| `message.created` | `{ message }` |
-| `message.reaction_changed` | `{ conversationId, messageId, userId, emoji, removed }` |
-| `conversation.updated` | `{ conversationId, name }` |
-| `conversation.deleted` | `{ conversationId }` |
-| `group.member_joined` / `group.member_left` | `{ conversationId, userId }` |
-| `group.role_changed` | `{ conversationId, userId, role }` |
+| Event                                       | Payload                                                 |
+| ------------------------------------------- | ------------------------------------------------------- |
+| `message.created`                           | `{ message }`                                           |
+| `message.reaction_changed`                  | `{ conversationId, messageId, userId, emoji, removed }` |
+| `conversation.updated`                      | `{ conversationId, name }`                              |
+| `conversation.deleted`                      | `{ conversationId }`                                    |
+| `group.member_joined` / `group.member_left` | `{ conversationId, userId }`                            |
+| `group.role_changed`                        | `{ conversationId, userId, role }`                      |
 
 Request schemas and endpoint descriptions are available at `/openapi.json`.
 Tests use in-memory repositories and storage plus temporary localhost HTTP/socket
