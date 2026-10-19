@@ -34,6 +34,8 @@ async function fixture() {
 	const repository = new MemoryConversationRepository();
 	for (const account of [alice, bob, outsider])
 		repository.users.add(account.user.id);
+	repository.usernames.set("alice", alice.user.id);
+	repository.usernames.set("bob_123", bob.user.id);
 	const service = new ConversationService(
 		repository,
 		new MemoryChatStorage(),
@@ -142,4 +144,53 @@ test("HTTP group invites join the group and only owners grant admin or delete", 
 		.get(inviteLink)
 		.auth(bob.tokens.accessToken, { type: "bearer" })
 		.expect(404);
+});
+
+test("HTTP chats can start by username and send messages without knowing the recipient ID", async () => {
+	const { app, alice, bob } = await fixture();
+	const endpoint = "/api/conversations/private";
+	await request(app).post(endpoint).send({ username: "bob_123" }).expect(401);
+	const chat = await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "BoB_123" })
+		.expect(200);
+	const byId = await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	expect(chat.body.conversation.id).toBe(byId.body.conversation.id);
+	const message = await request(app)
+		.post(`${endpoint}/by-username/BOB_123/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Hello Bob" })
+		.expect(201);
+	expect(message.body.message.conversationId).toBe(chat.body.conversation.id);
+	expect(message.body.message.senderId).toBe(alice.user.id);
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "does_not_exist" })
+		.expect(404);
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "ALICE" })
+		.expect(400);
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "bob_123", userId: bob.user.id })
+		.expect(400);
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "bob-123" })
+		.expect(400);
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({})
+		.expect(400);
 });

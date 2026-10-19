@@ -16,6 +16,7 @@ import {
 	messageSchema,
 	parseInput,
 	reactionSchema,
+	usernameSchema,
 } from "./conversation.validation.js";
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
@@ -105,6 +106,30 @@ export class ConversationService {
 		parseInput(messageSchema, input);
 		const conversation = await this.createPrivate(userId, recipientId);
 		return this.sendMessage(userId, conversation.id, input);
+	}
+
+	private async resolveUsername(username: string) {
+		const normalized = parseInput(usernameSchema, username);
+		const recipientId = await this.repository.findUserIdByUsername(normalized);
+		if (!recipientId) throw new HttpError(404, "User not found");
+		return recipientId;
+	}
+
+	async createPrivateByUsername(userId: string, username: string) {
+		return this.createPrivate(userId, await this.resolveUsername(username));
+	}
+
+	async sendPrivateByUsername(
+		userId: string,
+		username: string,
+		input: NewMessage,
+	) {
+		parseInput(messageSchema, input);
+		return this.sendPrivate(
+			userId,
+			await this.resolveUsername(username),
+			input,
+		);
 	}
 
 	async createGroup(userId: string, name: string) {

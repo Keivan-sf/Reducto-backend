@@ -18,7 +18,8 @@ import {
 	pageSchema,
 	parseInput,
 	reactionSchema,
-	userSchema,
+	privateRecipientSchema,
+	usernameSchema,
 } from "./conversation.validation.js";
 
 export function handle(
@@ -69,11 +70,28 @@ export function createConversationRouter(
 	router.post(
 		"/private",
 		handle(async (request, response) => {
-			const input = parseInput(userSchema, request.body);
+			const input = parseInput(privateRecipientSchema, request.body);
 			response.status(200).json({
-				conversation: await service.createPrivate(
+				conversation:
+					"username" in input
+						? await service.createPrivateByUsername(
+								request.auth!.userId,
+								input.username,
+							)
+						: await service.createPrivate(request.auth!.userId, input.userId),
+			});
+		}),
+	);
+	router.post(
+		"/private/by-username/:username/messages",
+		handle(async (request, response) => {
+			const username = parseInput(usernameSchema, request.params.username);
+			const input = parseInput(messageSchema, request.body);
+			response.status(201).json({
+				message: await service.sendPrivateByUsername(
 					request.auth!.userId,
-					input.userId,
+					username,
+					input,
 				),
 			});
 		}),

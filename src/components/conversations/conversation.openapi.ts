@@ -94,6 +94,14 @@ const nameBody = object({
 	name: { type: "string", minLength: 1, maxLength: 100 },
 });
 const userBody = object({ userId: uuid });
+const username = {
+	type: "string",
+	minLength: 1,
+	maxLength: 32,
+	pattern: "^[A-Za-z0-9_]+$",
+	description: "Case-insensitive username",
+};
+const privateRecipientBody = { oneOf: [userBody, object({ username })] };
 const messageResult = object({ message: reference("Message") });
 const conversationResult = object({ conversation: reference("Conversation") });
 
@@ -111,9 +119,9 @@ export const chatPaths = {
 	},
 	"/api/conversations/private": {
 		post: operation(
-			"Create or reuse a private conversation",
+			"Create or reuse a private conversation by user ID or username",
 			200,
-			userBody,
+			privateRecipientBody,
 			[],
 			conversationResult,
 		),
@@ -124,6 +132,15 @@ export const chatPaths = {
 			201,
 			reference("SendMessage"),
 			[parameter("userId")],
+			messageResult,
+		),
+	},
+	"/api/conversations/private/by-username/{username}/messages": {
+		post: operation(
+			"Send a private message by case-insensitive username, creating the chat if needed",
+			201,
+			reference("SendMessage"),
+			[{ name: "username", in: "path", required: true, schema: username }],
 			messageResult,
 		),
 	},

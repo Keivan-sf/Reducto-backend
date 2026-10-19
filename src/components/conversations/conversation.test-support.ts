@@ -14,6 +14,7 @@ import type {
 
 export class MemoryConversationRepository implements ConversationRepository {
 	readonly users = new Set<string>();
+	readonly usernames = new Map<string, string>();
 	readonly gifs = new Set<string>();
 	readonly conversations = new Map<string, Conversation>();
 	readonly members = new Map<string, Member>();
@@ -23,6 +24,9 @@ export class MemoryConversationRepository implements ConversationRepository {
 
 	async userExists(userId: string) {
 		return this.users.has(userId);
+	}
+	async findUserIdByUsername(username: string) {
+		return this.usernames.get(username.toLowerCase());
 	}
 	async gifExists(gifId: string) {
 		return this.gifs.has(gifId);

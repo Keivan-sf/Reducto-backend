@@ -30,8 +30,9 @@ members immediately lose access to future requests and notifications.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | GET | `/api/conversations` | List my private chats and groups |
-| POST | `/api/conversations/private` | Create/reuse a private chat with `{ "userId": "..." }` |
+| POST | `/api/conversations/private` | Create/reuse a private chat with `{ "username": "alice" }` or `{ "userId": "..." }` (exactly one) |
 | POST | `/api/conversations/private/:userId/messages` | Send a message and create/reuse the chat |
+| POST | `/api/conversations/private/by-username/:username/messages` | Send a message by username and create/reuse the chat |
 | GET | `/api/conversations/:id` | Read a conversation |
 | GET | `/api/conversations/:id/members` | List participants and roles |
 | GET | `/api/conversations/:id/messages?limit=50&before=messageId` | History, newest first; use `nextCursor` for the next page |
@@ -40,6 +41,11 @@ members immediately lose access to future requests and notifications.
 | POST | `/api/conversations/:id/attachments` | Upload multipart `file`, optionally `kind=music` |
 | GET | `/api/conversations/:id/attachments/:mediaId` | Download an attachment |
 | PUT / DELETE | `/api/conversations/:id/messages/:messageId/reactions` | Add/remove my `{ "emoji": "👍" }` reaction |
+
+Usernames are case-insensitive: `Alice` and `alice` resolve to the same user.
+Username and user ID lookups reuse the same private conversation. Changing a
+username does not change existing chats. Unknown usernames return `404`, and
+starting a chat with yourself returns `400`.
 
 Message bodies accept `text` (up to 10,000 characters) and a single `attachment`:
 

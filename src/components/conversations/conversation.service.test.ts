@@ -290,3 +290,37 @@ test("private chats reject self-messaging and nonexistent recipients", async () 
 		service.createPrivate(owner, randomUUID()),
 	).rejects.toMatchObject({ status: 404 });
 });
+
+test("username lookups are case-insensitive and reuse chats created by ID, including after a rename", async () => {
+	const { service, repository, owner, member } = fixture();
+	repository.usernames.set("some_user123", member);
+	const byId = await service.createPrivate(owner, member);
+	const byName = await service.createPrivateByUsername(owner, "Some_User123");
+	expect(byName.id).toBe(byId.id);
+	const message = await service.sendPrivateByUsername(owner, "SOME_USER123", {
+		text: "Hello",
+	});
+	expect(message.conversationId).toBe(byId.id);
+	repository.usernames.delete("some_user123");
+	repository.usernames.set("renamed", member);
+	expect((await service.createPrivateByUsername(owner, "Renamed")).id).toBe(
+		byId.id,
+	);
+	await expect(
+		service.createPrivateByUsername(owner, "some_user123"),
+	).rejects.toMatchObject({ status: 404 });
+});
+
+test("username recipients reject self-chats, unknown users, and invalid names", async () => {
+	const { service, repository, owner } = fixture();
+	repository.usernames.set("me", owner);
+	await expect(
+		service.createPrivateByUsername(owner, "ME"),
+	).rejects.toMatchObject({ status: 400 });
+	await expect(
+		service.createPrivateByUsername(owner, "unknown"),
+	).rejects.toMatchObject({ status: 404 });
+	await expect(
+		service.createPrivateByUsername(owner, "not-a-username"),
+	).rejects.toMatchObject({ status: 400 });
+});

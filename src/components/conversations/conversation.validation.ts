@@ -25,6 +25,16 @@ export const groupSchema = z
 	.object({ name: z.string().trim().min(1).max(100) })
 	.strict();
 export const userSchema = z.object({ userId: z.uuid().toLowerCase() }).strict();
+export const usernameSchema = z
+	.string()
+	.min(1)
+	.max(32)
+	.regex(/^[A-Za-z0-9_]+$/)
+	.toLowerCase();
+export const privateRecipientSchema = z.union([
+	userSchema,
+	z.object({ username: usernameSchema }).strict(),
+]);
 export const roleSchema = z
 	.object({ role: z.enum(["admin", "member"]) })
 	.strict();

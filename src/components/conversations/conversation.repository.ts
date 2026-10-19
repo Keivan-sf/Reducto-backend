@@ -21,6 +21,7 @@ import type {
 
 export interface ConversationRepository {
 	userExists(userId: string): Promise<boolean>;
+	findUserIdByUsername(username: string): Promise<string | undefined>;
 	gifExists(gifId: string): Promise<boolean>;
 	createPrivate(userIds: [string, string]): Promise<Conversation>;
 	createGroup(
@@ -71,6 +72,15 @@ type Database = ReturnType<typeof createDatabase>;
 
 export class DrizzleConversationRepository implements ConversationRepository {
 	constructor(private readonly database: Database) {}
+
+	async findUserIdByUsername(username: string) {
+		const [user] = await this.database
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, username.toLowerCase()))
+			.limit(1);
+		return user?.id;
+	}
 
 	async userExists(userId: string) {
 		return Boolean(
