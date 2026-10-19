@@ -35,11 +35,29 @@ export function createGifRouter(
 	);
 	router.get("/", requireAuth(authService), async (request, response, next) => {
 		try {
+			response.setHeader("Cache-Control", "no-store");
 			response.json({ gifs: await gifService.listGifs(request.auth!.userId) });
 		} catch (error) {
 			next(error);
 		}
 	});
+	router.get(
+		"/:gifId",
+		requireAuth(authService),
+		async (request, response, next) => {
+			try {
+				const parsed = gifIdSchema.safeParse(request.params);
+				if (!parsed.success) {
+					response.status(400).json({ error: "Invalid GIF id" });
+					return;
+				}
+				response.setHeader("Cache-Control", "no-store");
+				response.json({ gif: await gifService.getGif(parsed.data.gifId) });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 	router.post(
 		"/",
 		requireAuth(authService),
@@ -50,6 +68,7 @@ export function createGifRouter(
 					response.status(400).json({ error: "GIF or video file is required" });
 					return;
 				}
+				response.setHeader("Cache-Control", "no-store");
 				response.status(201).json({
 					gif: await gifService.uploadGif(request.auth!.userId, request.file),
 				});

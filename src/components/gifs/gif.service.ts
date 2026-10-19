@@ -9,17 +9,23 @@ import type { GifRepository, UserGif } from "./gif.repository.js";
 
 export const MAX_GIF_SIZE_BYTES = 50 * 1024 * 1024;
 
+export interface GifObjectStorage extends ObjectStorage {
+	getPlaybackUrl(key: string): Promise<string>;
+}
+
+export type GifDetails = UserGif & { playbackUrl: string };
+
 export class GifService {
 	constructor(
 		private readonly repository: GifRepository,
-		private readonly objectStorage: ObjectStorage,
+		private readonly objectStorage: GifObjectStorage,
 		private readonly converter: GifConverter = new FfmpegGifConverter(),
 	) {}
 
 	async uploadGif(
 		userId: string,
 		gif: { buffer: Buffer; mimetype: string },
-	): Promise<UserGif> {
+	): Promise<GifDetails> {
 		if (
 			gif.mimetype !== "image/gif" &&
 			!gif.mimetype.startsWith("video/") &&
@@ -41,8 +47,9 @@ export class GifService {
 			body: converted,
 			contentType: "video/mp4",
 		});
+		let record: UserGif;
 		try {
-			return await this.repository.createGif({
+			record = await this.repository.createGif({
 				userId,
 				objectKey,
 				fileSize: converted.length,
@@ -51,10 +58,25 @@ export class GifService {
 			await this.objectStorage.deleteObject(objectKey);
 			throw error;
 		}
+		return this.withPlaybackUrl(record);
 	}
 
-	listGifs(userId: string): Promise<UserGif[]> {
-		return this.repository.listGifs(userId);
+	private async withPlaybackUrl(gif: UserGif): Promise<GifDetails> {
+		return {
+			...gif,
+			playbackUrl: await this.objectStorage.getPlaybackUrl(gif.objectKey),
+		};
+	}
+
+	async listGifs(userId: string): Promise<GifDetails[]> {
+		const gifs = await this.repository.listGifs(userId);
+		return Promise.all(gifs.map((gif) => this.withPlaybackUrl(gif)));
+	}
+
+	async getGif(gifId: string): Promise<GifDetails> {
+		const gif = await this.repository.findGif(gifId);
+		if (!gif) throw new HttpError(404, "GIF not found");
+		return this.withPlaybackUrl(gif);
 	}
 
 	async deleteGif(userId: string, gifId: string): Promise<void> {

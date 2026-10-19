@@ -1,9 +1,12 @@
-import { expect, test } from "@jest/globals";
-import type { ObjectStorage } from "../../lib/object-storage.js";
+import { expect, jest, test } from "@jest/globals";
 import { InMemoryGifRepository } from "./gif.repository.js";
-import { GifService, MAX_GIF_SIZE_BYTES } from "./gif.service.js";
+import {
+	GifService,
+	MAX_GIF_SIZE_BYTES,
+	type GifObjectStorage,
+} from "./gif.service.js";
 
-class InMemoryObjectStorage implements ObjectStorage {
+class InMemoryObjectStorage implements GifObjectStorage {
 	readonly objects = new Map<string, Buffer>();
 
 	async putObject(input: { key: string; body: Buffer }) {
@@ -12,6 +15,10 @@ class InMemoryObjectStorage implements ObjectStorage {
 
 	async deleteObject(key: string) {
 		this.objects.delete(key);
+	}
+
+	async getPlaybackUrl(key: string) {
+		return `https://storage.example/${key}?signed=true`;
 	}
 }
 
@@ -31,6 +38,9 @@ test("a user can store and remove their own GIF", async () => {
 		mimetype: "image/gif",
 	});
 	expect(gif.objectKey).toMatch(/^gifs\/ada-id\/.*\.mp4$/);
+	expect(gif.playbackUrl).toBe(
+		`https://storage.example/${gif.objectKey}?signed=true`,
+	);
 	expect(await service.listGifs("ada-id")).toHaveLength(1);
 	expect(storage.objects.has(gif.objectKey)).toBe(true);
 
@@ -51,7 +61,8 @@ test("libraries share a stable GIF ID and removal does not delete the GIF", asyn
 	await service.addToLibrary("grace-id", gif.id);
 	expect(await service.listGifs("grace-id")).toEqual([gif]);
 	await service.deleteGif("ada-id", gif.id);
-	expect(await repository.findGif(gif.id)).toEqual(gif);
+	const { playbackUrl, ...record } = gif;
+	expect(await repository.findGif(gif.id)).toEqual(record);
 	expect(await service.listGifs("grace-id")).toEqual([gif]);
 	expect(storage.objects.has(gif.objectKey)).toBe(true);
 });
@@ -110,4 +121,58 @@ test("uploads larger than 50 MB are rejected before conversion or storage", asyn
 		}),
 	).rejects.toMatchObject({ status: 400 });
 	expect(storage.objects.size).toBe(0);
+});
+
+test("GIF lookups and library lists generate fresh playback URLs without persisting them", async () => {
+	const repository = new InMemoryGifRepository(new Set(["ada-id"]));
+	const storage = new InMemoryObjectStorage();
+	const service = new GifService(repository, storage, {
+		async convertToMp4() {
+			return Buffer.from("mp4");
+		},
+	});
+	const gif = await service.uploadGif("ada-id", {
+		buffer: Buffer.from("video"),
+		mimetype: "video/mp4",
+	});
+	const signer = jest
+		.spyOn(storage, "getPlaybackUrl")
+		.mockResolvedValueOnce("https://storage.example/first")
+		.mockResolvedValueOnce("https://storage.example/refreshed");
+	expect((await service.getGif(gif.id)).playbackUrl).toBe(
+		"https://storage.example/first",
+	);
+	expect((await service.listGifs("ada-id"))[0].playbackUrl).toBe(
+		"https://storage.example/refreshed",
+	);
+	expect(signer).toHaveBeenNthCalledWith(1, gif.objectKey);
+	expect(signer).toHaveBeenNthCalledWith(2, gif.objectKey);
+	expect(await repository.findGif(gif.id)).not.toHaveProperty("playbackUrl");
+	await expect(service.getGif(crypto.randomUUID())).rejects.toMatchObject({
+		status: 404,
+	});
+});
+
+test("a playback signing failure does not delete a successfully saved MP4", async () => {
+	const repository = new InMemoryGifRepository(new Set(["ada-id"]));
+	const storage = new InMemoryObjectStorage();
+	jest
+		.spyOn(storage, "getPlaybackUrl")
+		.mockRejectedValueOnce(new Error("Signing unavailable"));
+	const service = new GifService(repository, storage, {
+		async convertToMp4() {
+			return Buffer.from("mp4");
+		},
+	});
+	await expect(
+		service.uploadGif("ada-id", {
+			buffer: Buffer.from("video"),
+			mimetype: "video/mp4",
+		}),
+	).rejects.toThrow("Signing unavailable");
+	const [saved] = await repository.listGifs("ada-id");
+	expect(storage.objects.has(saved.objectKey)).toBe(true);
+	expect((await service.getGif(saved.id)).playbackUrl).toContain(
+		saved.objectKey,
+	);
 });

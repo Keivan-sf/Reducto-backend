@@ -17,6 +17,15 @@ before saving it under `gifs/` in object storage. The database file size refers
 to the converted MP4. Uploads are automatically added to the user's library.
 Existing stored files are not converted retroactively.
 
+`POST /api/gifs`, `GET /api/gifs`, and `GET /api/gifs/:gifId` return a
+`playbackUrl` alongside each GIF's `id`, `userId`, `objectKey`, `fileSize`, and
+`createdAt`. Use it directly as a video player's source. The URL is presigned for
+15 minutes and supports normal object-storage video playback; fetch the library
+or GIF details again to obtain a fresh URL. Requests for GIF details require a
+bearer token, but the returned link plays without an Authorization header.
+`S3_ENDPOINT` must be reachable by clients playing the URL. For a message's GIF
+attachment, fetch `/api/gifs/:gifId` to resolve its ID into metadata and a playable URL.
+
 Run offline tests with `pnpm test`, typecheck with `pnpm run typecheck`, and format
 code with `pnpm run format`.
 

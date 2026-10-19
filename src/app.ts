@@ -6,6 +6,7 @@ import { createSettingsRouter } from "./components/settings/settings.router.js";
 import type { SettingsService } from "./components/settings/settings.service.js";
 import { createGifRouter } from "./components/gifs/gif.router.js";
 import type { GifService } from "./components/gifs/gif.service.js";
+import { gifPaths, gifSchemas } from "./components/gifs/gif.openapi.js";
 import { createConversationRouter } from "./components/conversations/conversation.router.js";
 import { createGroupRouter } from "./components/groups/group.router.js";
 import type { ConversationService } from "./components/conversations/conversation.service.js";
@@ -34,6 +35,7 @@ export function createApp(
 			paths: {
 				...chatPaths,
 				...userPaths,
+				...gifPaths,
 				"/api/auth/sign-up": { post: { summary: "Create an account" } },
 				"/api/auth/sign-in": { post: { summary: "Sign in" } },
 				"/api/auth/refresh": { post: { summary: "Rotate a refresh token" } },
@@ -56,29 +58,9 @@ export function createApp(
 						security: [{ bearerAuth: [] }],
 					},
 				},
-				"/api/gifs": {
-					get: {
-						summary: "List the authenticated user's stored GIFs",
-						security: [{ bearerAuth: [] }],
-					},
-					post: {
-						summary: "Upload a GIF or video (max 50 MB), stored as muted MP4",
-						security: [{ bearerAuth: [] }],
-					},
-				},
-				"/api/gifs/{gifId}": {
-					put: {
-						summary: "Add an existing GIF to the authenticated user's library",
-						security: [{ bearerAuth: [] }],
-					},
-					delete: {
-						summary: "Remove a GIF from the authenticated user's library",
-						security: [{ bearerAuth: [] }],
-					},
-				},
 			},
 			components: {
-				schemas: { ...chatSchemas, ...userSchemas },
+				schemas: { ...chatSchemas, ...userSchemas, ...gifSchemas },
 				securitySchemes: {
 					bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
 				},

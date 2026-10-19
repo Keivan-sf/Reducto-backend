@@ -73,4 +73,17 @@ export class S3ObjectStorage implements ObjectStorage {
 			{ expiresIn: 15 * 60 },
 		);
 	}
+
+	async getPlaybackUrl(key: string): Promise<string> {
+		return getSignedUrl(
+			this.client,
+			new GetObjectCommand({
+				Bucket: this.config.bucket,
+				Key: key,
+				ResponseContentType: "video/mp4",
+				ResponseContentDisposition: "inline",
+			}),
+			{ expiresIn: 15 * 60 },
+		);
+	}
 }
