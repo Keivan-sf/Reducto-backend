@@ -13,6 +13,9 @@ importers:
       "@aws-sdk/s3-request-presigner":
         specifier: ^3.888.0
         version: 3.1152.0
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
       drizzle-orm:
         specifier: ^0.44.7
         version: 0.44.7(@types/pg@8.23.1)(pg@8.23.1)
@@ -44,6 +47,9 @@ importers:
       "@jest/globals":
         specifier: ^30.2.0
         version: 30.5.2
+      "@types/cors":
+        specifier: ^2.8.19
+        version: 2.8.19
       "@types/express":
         specifier: ^5.0.6
         version: 5.0.6

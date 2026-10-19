@@ -55,6 +55,11 @@ storage keys. Malformed IDs/usernames return `400`; missing users return `404`.
 
 ## Conversations and messages
 
+HTTP and Socket.IO endpoints accept requests from every origin, including
+credentialed browser requests. CORS preflights allow all application HTTP methods
+and reflect requested headers, including `Authorization` and `Content-Type`.
+Authentication and conversation membership checks still apply.
+
 All chat and group HTTP endpoints require `Authorization: Bearer <accessToken>`.
 Users can only read, send, react, upload, and download in conversations they belong
 to. Group members can read the group's existing history when they join. Removed

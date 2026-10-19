@@ -1,4 +1,6 @@
 import express from "express";
+import cors from "cors";
+import { corsOptions } from "./lib/cors.js";
 import { errorHandler } from "./lib/http.js";
 import { createAuthRouter } from "./components/auth/auth.router.js";
 import type { AuthService } from "./components/auth/auth.service.js";
@@ -26,6 +28,7 @@ export function createApp(
 	userService: UserService,
 ) {
 	const app = express();
+	app.use(cors(corsOptions));
 	app.use(express.json({ limit: "1mb" }));
 	app.get("/health", (_request, response) => response.json({ status: "ok" }));
 	app.get("/openapi.json", (_request, response) =>

@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import type { Server as HttpServer } from "node:http";
 import type { AuthService } from "../components/auth/auth.service.js";
 import type { Notifications } from "./notifications.js";
+import { corsOptions } from "../lib/cors.js";
 
 export function userRoom(userId: string) {
 	return `user:${userId}`;
@@ -12,7 +13,7 @@ export function attachRealtime(
 	auth: AuthService,
 	io = new Server(),
 ) {
-	io.attach(server);
+	io.attach(server, { cors: corsOptions });
 	io.use((socket, next) => {
 		void (async () => {
 			const token: unknown = socket.handshake.auth.token;
