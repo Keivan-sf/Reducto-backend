@@ -139,6 +139,14 @@ offline users; retrieve persisted history through HTTP after reconnecting.
 | `group.member_joined` / `group.member_left` | `{ conversationId, userId }`                            |
 | `group.role_changed`                        | `{ conversationId, userId, role }`                      |
 
+Profile changes emit `user.profile_updated` with `{ userId, changedFields }`, where
+`changedFields` contains `name`, `username`, and/or `avatar`. Only other users who
+currently share a private conversation or group with the changed user receive it.
+Recipients are deduplicated across shared chats; the changed user, unrelated users,
+and former members without another shared chat are excluded. Notifications follow
+successful saves, and unchanged name/username updates do not emit an event.
+Fetch `/api/users/:userId` on receipt to refresh details and the temporary avatar URL.
+
 Request schemas and endpoint descriptions are available at `/openapi.json`.
 Tests use in-memory repositories and storage plus temporary localhost HTTP/socket
 servers; they do not contact PostgreSQL, MinIO, or external services.

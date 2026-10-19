@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { HttpError } from "../../lib/http.js";
 import type { ObjectStorage } from "../../lib/object-storage.js";
+import type { Notifications } from "../../realtime/notifications.js";
 import type {
 	SettingsRepository,
 	SettingsUser,
@@ -13,7 +14,21 @@ export class SettingsService {
 	constructor(
 		private readonly repository: SettingsRepository,
 		private readonly objectStorage: ObjectStorage,
+		private readonly notifications: Notifications,
 	) {}
+
+	private async notifyProfileChanged(
+		userId: string,
+		changedFields: ("name" | "username" | "avatar")[],
+	) {
+		if (!changedFields.length) return;
+		const recipients = await this.repository.findConversationPeerIds(userId);
+		if (recipients.length)
+			this.notifications.publish(recipients, "user.profile_updated", {
+				userId,
+				changedFields,
+			});
+	}
 
 	async updateProfile(
 		userId: string,
@@ -22,7 +37,8 @@ export class SettingsService {
 		const currentUser = await this.repository.findUserById(userId);
 		if (!currentUser) throw new HttpError(404, "User not found");
 
-		const username = changes.username?.toLowerCase();
+		const username =
+			changes.username === null ? null : changes.username?.toLowerCase();
 		if (username) {
 			const existingUser = await this.repository.findUserByUsername(username);
 			if (existingUser && existingUser.id !== userId) {
@@ -30,10 +46,16 @@ export class SettingsService {
 			}
 		}
 
-		return this.repository.updateUser(userId, {
+		const updatedUser = await this.repository.updateUser(userId, {
 			...(changes.name === undefined ? {} : { name: changes.name.trim() }),
 			...(changes.username === undefined ? {} : { username }),
 		});
+		const changedFields: ("name" | "username")[] = [];
+		if (updatedUser.name !== currentUser.name) changedFields.push("name");
+		if (updatedUser.username !== currentUser.username)
+			changedFields.push("username");
+		await this.notifyProfileChanged(userId, changedFields);
+		return updatedUser;
 	}
 
 	async updateAvatar(
@@ -76,6 +98,10 @@ export class SettingsService {
 			body: avatar.buffer,
 			contentType: `image/${metadata.format === "jpeg" ? "jpeg" : metadata.format}`,
 		});
-		return this.repository.updateUser(userId, { avatarKey: key });
+		const updatedUser = await this.repository.updateUser(userId, {
+			avatarKey: key,
+		});
+		await this.notifyProfileChanged(userId, ["avatar"]);
+		return updatedUser;
 	}
 }

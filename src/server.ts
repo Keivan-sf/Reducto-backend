@@ -45,20 +45,22 @@ const objectStorage = new S3ObjectStorage({
 	accessKeyId: environment.S3_ACCESS_KEY,
 	secretAccessKey: environment.S3_SECRET_KEY,
 });
+const io = new Server();
+const notifications = new SocketNotifications(io);
 const settingsService = new SettingsService(
 	new DrizzleSettingsRepository(database),
 	objectStorage,
+	notifications,
 );
 const gifService = new GifService(
 	new DrizzleGifRepository(database),
 	objectStorage,
 );
 
-const io = new Server();
 const conversationService = new ConversationService(
 	new DrizzleConversationRepository(database),
 	objectStorage,
-	new SocketNotifications(io),
+	notifications,
 );
 const server = createServer(
 	createApp(
