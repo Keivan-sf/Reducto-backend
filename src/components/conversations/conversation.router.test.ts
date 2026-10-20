@@ -194,3 +194,51 @@ test("HTTP chats can start by username and send messages without knowing the rec
 		.send({})
 		.expect(400);
 });
+
+test("HTTP replies work through username and conversation routes, with same-chat validation", async () => {
+	const { app, alice, bob, outsider } = await fixture();
+	const originalResponse = await request(app)
+		.post(`/api/conversations/private/${bob.user.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Question" })
+		.expect(201);
+	const original = originalResponse.body.message;
+	const replyResponse = await request(app)
+		.post("/api/conversations/private/by-username/ALICE/messages")
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Answer", replyToMessageId: original.id })
+		.expect(201);
+	const reply = replyResponse.body.message;
+	expect(reply.replyToMessageId).toBe(original.id);
+	const base = `/api/conversations/${original.conversationId}/messages`;
+	const lookup = await request(app)
+		.get(`${base}/${original.id}`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(lookup.body.message.id).toBe(original.id);
+	await request(app)
+		.get(`${base}/${original.id}`)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(403);
+	await request(app).get(`${base}/${original.id}`).expect(401);
+	await request(app)
+		.post(base)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Follow-up", replyToMessageId: reply.id })
+		.expect(201);
+	await request(app)
+		.post(base)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Invalid", replyToMessageId: "invalid" })
+		.expect(400);
+	const other = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: outsider.user.id })
+		.expect(200);
+	await request(app)
+		.post(`/api/conversations/${other.body.conversation.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Wrong chat", replyToMessageId: original.id })
+		.expect(400);
+});

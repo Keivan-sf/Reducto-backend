@@ -85,11 +85,28 @@ Username and user ID lookups reuse the same private conversation. Changing a
 username does not change existing chats. Unknown usernames return `404`, and
 starting a chat with yourself returns `400`.
 
-Message bodies accept `text` (up to 10,000 characters) and a single `attachment`:
+Message bodies accept `text` (up to 10,000 characters), a single `attachment`,
+and an optional `replyToMessageId`:
 
 ```json
 { "text": "Hello!" }
 ```
+
+```json
+{
+	"text": "Replying to your question",
+	"replyToMessageId": "<original message UUID>"
+}
+```
+
+Replies work in private chats and groups, including the send-by-ID and
+send-by-username endpoints. The target must exist in the same conversation;
+missing or cross-chat targets return `400`. A reply still needs text or an
+attachment. Replies can reference other replies. Message responses, history,
+and `message.created` notifications include `replyToMessageId` (null for ordinary
+messages). Use authenticated `GET /api/conversations/:id/messages/:messageId` to
+fetch a reply target outside the current history page. Forwarded messages retain
+their origin metadata but do not inherit the source message's reply reference.
 
 ```json
 { "attachment": { "type": "gif", "gifId": "<GIF UUID>" } }

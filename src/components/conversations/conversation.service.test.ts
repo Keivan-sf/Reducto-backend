@@ -324,3 +324,114 @@ test("username recipients reject self-chats, unknown users, and invalid names", 
 		service.createPrivateByUsername(owner, "not-a-username"),
 	).rejects.toMatchObject({ status: 400 });
 });
+
+test("private replies persist their target in history, single-message lookups, and notifications", async () => {
+	const { service, owner, member, outsider, notifications } = fixture();
+	const original = await service.sendPrivate(owner, member, {
+		text: "Question",
+	});
+	const reply = await service.sendPrivate(member, owner, {
+		text: "Answer",
+		replyToMessageId: original.id,
+	});
+	expect(original.replyToMessageId).toBeNull();
+	expect(reply.replyToMessageId).toBe(original.id);
+	expect(
+		(await service.getMessage(owner, original.conversationId, reply.id))
+			.replyToMessageId,
+	).toBe(original.id);
+	expect(
+		(await service.listMessages(owner, original.conversationId, 50)).messages,
+	).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({ id: reply.id, replyToMessageId: original.id }),
+		]),
+	);
+	expect(notifications.events.at(-1)!.payload).toEqual({ message: reply });
+	await expect(
+		service.getMessage(outsider, original.conversationId, original.id),
+	).rejects.toMatchObject({ status: 403 });
+});
+
+test("group members can reply with attachments and reply to replies", async () => {
+	const { service, repository, owner, member } = fixture();
+	const group = await service.createGroup(owner, "Group");
+	await service.addMember(owner, group.id, member);
+	const original = await service.sendMessage(owner, group.id, {
+		text: "Question",
+	});
+	const gifId = randomUUID();
+	repository.gifs.add(gifId);
+	const reply = await service.sendMessage(member, group.id, {
+		replyToMessageId: original.id,
+		attachment: { type: "gif", gifId },
+	});
+	expect(reply).toMatchObject({
+		replyToMessageId: original.id,
+		text: null,
+		attachment: { type: "gif", gifId },
+	});
+	const nested = await service.sendMessage(owner, group.id, {
+		text: "Thanks",
+		replyToMessageId: reply.id,
+	});
+	expect(nested.replyToMessageId).toBe(reply.id);
+});
+
+test("reply targets must exist in the same chat even if the sender belongs to both", async () => {
+	const { service, repository, notifications, owner, member, outsider } =
+		fixture();
+	const original = await service.sendPrivate(owner, member, {
+		text: "Private question",
+	});
+	const other = await service.createPrivate(owner, outsider);
+	const eventCount = notifications.events.length;
+	await expect(
+		service.sendMessage(owner, other.id, {
+			text: "Cross-chat reply",
+			replyToMessageId: original.id,
+		}),
+	).rejects.toMatchObject({ status: 400 });
+	await expect(
+		service.sendMessage(owner, other.id, {
+			text: "Missing reply",
+			replyToMessageId: randomUUID(),
+		}),
+	).rejects.toMatchObject({ status: 400 });
+	await expect(
+		service.sendMessage(owner, other.id, {
+			text: "Invalid reply",
+			replyToMessageId: "invalid",
+		}),
+	).rejects.toMatchObject({ status: 400 });
+	await expect(
+		service.sendMessage(owner, original.conversationId, {
+			replyToMessageId: original.id,
+		}),
+	).rejects.toMatchObject({ status: 400 });
+	expect(repository.messages.size).toBe(1);
+	expect(notifications.events).toHaveLength(eventCount);
+	await expect(
+		service.getMessage(owner, other.id, original.id),
+	).rejects.toMatchObject({ status: 404 });
+});
+
+test("forwarding a reply does not copy a reference to the original chat", async () => {
+	const { service, owner, member, outsider } = fixture();
+	const original = await service.sendPrivate(owner, member, {
+		text: "Question",
+	});
+	const reply = await service.sendPrivate(member, owner, {
+		text: "Answer",
+		replyToMessageId: original.id,
+	});
+	const destination = await service.createPrivate(member, outsider);
+	const forwarded = await service.forwardMessage(
+		member,
+		destination.id,
+		reply.id,
+	);
+	expect(forwarded.text).toBe("Answer");
+	expect(forwarded.replyToMessageId).toBeNull();
+	expect(forwarded.forwardedFrom?.messageId).toBe(reply.id);
+});

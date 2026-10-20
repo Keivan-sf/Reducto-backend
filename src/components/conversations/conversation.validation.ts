@@ -15,6 +15,7 @@ export const messageSchema = z
 	.object({
 		text: z.string().trim().min(1).max(10000).optional(),
 		attachment: z.union([fileAttachment, gifAttachment]).optional(),
+		replyToMessageId: z.uuid().toLowerCase().optional(),
 	})
 	.strict()
 	.refine(

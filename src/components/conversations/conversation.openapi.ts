@@ -61,6 +61,11 @@ export const chatSchemas = {
 			{
 				text: { type: "string", minLength: 1, maxLength: 10000 },
 				attachment: reference("MessageAttachment"),
+				replyToMessageId: {
+					...uuid,
+					description:
+						"Optional ID of an existing message in this conversation",
+				},
 			},
 			[],
 		),
@@ -77,6 +82,7 @@ export const chatSchemas = {
 		conversationId: uuid,
 		senderId: uuid,
 		text: { type: "string", nullable: true },
+		replyToMessageId: { ...uuid, nullable: true },
 		attachment: { ...reference("MessageAttachment"), nullable: true },
 		forwardedFrom: {
 			...object({ messageId: uuid, conversationId: uuid, senderId: uuid }),
@@ -106,6 +112,15 @@ const messageResult = object({ message: reference("Message") });
 const conversationResult = object({ conversation: reference("Conversation") });
 
 export const chatPaths = {
+	"/api/conversations/{conversationId}/messages/{messageId}": {
+		get: operation(
+			"Get a message, including a reply target outside the current history page",
+			200,
+			undefined,
+			messageParams,
+			messageResult,
+		),
+	},
 	"/api/conversations": {
 		get: operation(
 			"List my conversations",

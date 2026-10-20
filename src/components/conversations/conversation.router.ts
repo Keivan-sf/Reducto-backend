@@ -145,6 +145,18 @@ export function createConversationRouter(
 			);
 		}),
 	);
+	router.get(
+		"/:conversationId/messages/:messageId",
+		handle(async (request, response) => {
+			response.json({
+				message: await service.getMessage(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					String(request.params.messageId),
+				),
+			});
+		}),
+	);
 	router.post(
 		"/:conversationId/messages",
 		handle(async (request, response) => {

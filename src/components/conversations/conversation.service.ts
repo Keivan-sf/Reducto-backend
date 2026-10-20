@@ -265,6 +265,17 @@ export class ConversationService {
 	async sendMessage(userId: string, conversationId: string, input: NewMessage) {
 		const parsed = parseInput(messageSchema, input);
 		await this.requireMember(userId, conversationId);
+		if (parsed.replyToMessageId) {
+			const original = await this.repository.getMessage(
+				parsed.replyToMessageId,
+			);
+			if (!original || original.conversationId !== conversationId) {
+				throw new HttpError(
+					400,
+					"Reply target must be an existing message in this conversation",
+				);
+			}
+		}
 		if (parsed.attachment?.type === "gif") {
 			if (!(await this.repository.gifExists(parsed.attachment.gifId)))
 				throw new HttpError(404, "GIF not found");
@@ -286,6 +297,7 @@ export class ConversationService {
 			conversationId,
 			senderId: userId,
 			text: parsed.text ?? null,
+			replyToMessageId: parsed.replyToMessageId ?? null,
 			attachment: parsed.attachment ?? null,
 			forwardedFrom: null,
 		});
@@ -295,6 +307,17 @@ export class ConversationService {
 		const message = await this.repository.createMessage(input);
 		await this.publish(message.conversationId, "message.created", { message });
 		return message;
+	}
+
+	async getMessage(userId: string, conversationId: string, messageId: string) {
+		await this.requireMember(userId, conversationId);
+		const message = await this.repository.getMessage(messageId);
+		if (!message || message.conversationId !== conversationId)
+			throw new HttpError(404, "Message not found");
+		return {
+			...message,
+			reactions: await this.repository.listReactions([message.id]),
+		};
 	}
 
 	async listMessages(
@@ -355,6 +378,7 @@ export class ConversationService {
 			conversationId: destinationId,
 			senderId: userId,
 			text: source.text,
+			replyToMessageId: null,
 			attachment,
 			forwardedFrom: source.forwardedFrom ?? {
 				messageId: source.id,

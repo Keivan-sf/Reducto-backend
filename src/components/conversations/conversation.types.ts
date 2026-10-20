@@ -48,6 +48,7 @@ export type Message = {
 	conversationId: string;
 	senderId: string;
 	text: string | null;
+	replyToMessageId: string | null;
 	attachment: Attachment | null;
 	forwardedFrom: ForwardOrigin | null;
 	createdAt: Date;
@@ -57,7 +58,11 @@ export type Reaction = {
 	userId: string;
 	emoji: ReactionEmoji;
 };
-export type NewMessage = { text?: string; attachment?: Attachment };
+export type NewMessage = {
+	text?: string;
+	attachment?: Attachment;
+	replyToMessageId?: string;
+};
 export type MessagePage = {
 	messages: (Message & { reactions: Reaction[] })[];
 	nextCursor: string | null;

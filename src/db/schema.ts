@@ -1,6 +1,7 @@
 import {
 	integer,
 	index,
+	foreignKey,
 	jsonb,
 	pgEnum,
 	pgTable,
@@ -8,6 +9,7 @@ import {
 	text,
 	timestamp,
 	uuid,
+	unique,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -145,6 +147,7 @@ export const messages = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "restrict" }),
 		text: text("text"),
+		replyToMessageId: uuid("reply_to_message_id"),
 		attachment:
 			jsonb("attachment").$type<
 				import("../components/conversations/conversation.types.js").Attachment
@@ -158,6 +161,15 @@ export const messages = pgTable(
 			.notNull(),
 	},
 	(table) => [
+		unique("messages_conversation_id_id_unique").on(
+			table.conversationId,
+			table.id,
+		),
+		foreignKey({
+			name: "messages_reply_same_conversation_fk",
+			columns: [table.conversationId, table.replyToMessageId],
+			foreignColumns: [table.conversationId, table.id],
+		}),
 		index("messages_conversation_created_idx").on(
 			table.conversationId,
 			table.createdAt,

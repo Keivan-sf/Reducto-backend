@@ -43,6 +43,13 @@
 			"when": 1792342335766,
 			"tag": "0005_hesitant_calypso",
 			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1792478429122,
+			"tag": "0006_shocking_jocasta",
+			"breakpoints": true
 		}
 	]
 }
