@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { expect, test } from "@jest/globals";
 import { randomUUID } from "node:crypto";
 import { ConversationService } from "./conversation.service.js";
@@ -248,7 +249,13 @@ test("history pagination uses a stable cursor even when timestamps tie", async (
 });
 
 test("all attachment types are stored with their type and only members can upload", async () => {
-	const { service, storage, owner, member, outsider } = fixture();
+	const { repository, storage, notifications, owner, member, outsider } =
+		fixture();
+	const service = new ConversationService(repository, storage, notifications, {
+		async read() {
+			return { width: 640, height: 360 };
+		},
+	});
 	const chat = await service.createPrivate(owner, member);
 	const inputs = [
 		{ mimetype: "image/png", type: "image" },
@@ -269,6 +276,11 @@ test("all attachment types are stored with their type and only members can uploa
 			input.kind,
 		);
 		expect(media.type).toBe(input.type);
+		expect(media).toMatchObject(
+			input.type === "image" || input.type === "video"
+				? { width: 640, height: 360 }
+				: { width: null, height: null },
+		);
 	}
 	expect(storage.objects.size).toBe(5);
 	await expect(
@@ -538,4 +550,45 @@ test("message context requires membership and an anchor in the requested convers
 	expect(alone.after).toEqual([]);
 	expect(alone.hasMoreBefore).toBe(false);
 	expect(alone.hasMoreAfter).toBe(false);
+});
+
+test("image dimensions survive forwarding and invalid visual uploads are never stored", async () => {
+	const { service, storage, owner, member, outsider } = fixture();
+	const source = await service.createPrivate(owner, member);
+	const target = await service.createPrivate(owner, outsider);
+	const image = await sharp({
+		create: { width: 48, height: 32, channels: 3, background: "red" },
+	})
+		.png()
+		.toBuffer();
+	const media = await service.uploadAttachment(owner, source.id, {
+		buffer: image,
+		mimetype: "image/png",
+		originalname: "image.png",
+	});
+	const message = await service.sendMessage(owner, source.id, {
+		attachment: { type: "image", mediaId: media.id },
+	});
+	const forwarded = await service.forwardMessage(owner, target.id, message.id);
+	if (forwarded.attachment?.type !== "image") throw new Error("Expected image");
+	const copied = await service.getAttachment(
+		outsider,
+		target.id,
+		forwarded.attachment.mediaId,
+	);
+	expect(copied).toMatchObject({
+		width: 48,
+		height: 32,
+		objectKey: media.objectKey,
+	});
+	for (const mimetype of ["image/png", "video/mp4"]) {
+		await expect(
+			service.uploadAttachment(owner, source.id, {
+				buffer: Buffer.from("invalid"),
+				mimetype,
+				originalname: "bad",
+			}),
+		).rejects.toMatchObject({ status: 400 });
+	}
+	expect(storage.objects.size).toBe(1);
 });

@@ -36,6 +36,8 @@ export type Media = {
 	fileName: string;
 	contentType: string;
 	fileSize: number;
+	width: number | null;
+	height: number | null;
 	createdAt: Date;
 };
 export type ForwardOrigin = {

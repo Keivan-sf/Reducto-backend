@@ -6,6 +6,8 @@ export const gifSchemas = {
 			"userId",
 			"objectKey",
 			"fileSize",
+			"width",
+			"height",
 			"createdAt",
 			"playbackUrl",
 		],
@@ -14,6 +16,20 @@ export const gifSchemas = {
 			userId: { type: "string", format: "uuid" },
 			objectKey: { type: "string" },
 			fileSize: { type: "integer", description: "Converted MP4 size in bytes" },
+			width: {
+				type: "integer",
+				minimum: 1,
+				nullable: true,
+				description:
+					"Display width in pixels; null only for historical files awaiting backfill",
+			},
+			height: {
+				type: "integer",
+				minimum: 1,
+				nullable: true,
+				description:
+					"Display height in pixels; null only for historical files awaiting backfill",
+			},
 			createdAt: { type: "string", format: "date-time" },
 			playbackUrl: {
 				type: "string",

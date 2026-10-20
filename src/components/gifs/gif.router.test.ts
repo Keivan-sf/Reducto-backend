@@ -41,6 +41,11 @@ test("authenticated GIF responses include playable links on upload, library list
 				return Buffer.from("mp4");
 			},
 		},
+		{
+			async read() {
+				return { width: 640, height: 360 };
+			},
+		},
 	);
 	const app = express();
 	app.use("/api/gifs", createGifRouter(auth, service));
@@ -54,6 +59,7 @@ test("authenticated GIF responses include playable links on upload, library list
 		})
 		.expect(201);
 	const gif = uploaded.body.gif;
+	expect(gif).toMatchObject({ width: 640, height: 360 });
 	expect(gif.playbackUrl).toBe(
 		`https://storage.example/${gif.objectKey}?signed=true`,
 	);

@@ -1,3 +1,7 @@
+import {
+	MediaDimensionReader,
+	type DimensionReader,
+} from "../../lib/media-dimensions.js";
 import { randomUUID } from "node:crypto";
 import {
 	FfmpegGifConverter,
@@ -20,6 +24,7 @@ export class GifService {
 		private readonly repository: GifRepository,
 		private readonly objectStorage: GifObjectStorage,
 		private readonly converter: GifConverter = new FfmpegGifConverter(),
+		private readonly dimensions: DimensionReader = new MediaDimensionReader(),
 	) {}
 
 	async uploadGif(
@@ -41,6 +46,7 @@ export class GifService {
 		}
 
 		const converted = await this.converter.convertToMp4(gif.buffer);
+		const dimensions = await this.dimensions.read(converted, "video");
 		const objectKey = `gifs/${userId}/${randomUUID()}.mp4`;
 		await this.objectStorage.putObject({
 			key: objectKey,
@@ -53,6 +59,7 @@ export class GifService {
 				userId,
 				objectKey,
 				fileSize: converted.length,
+				...dimensions,
 			});
 		} catch (error) {
 			await this.objectStorage.deleteObject(objectKey);

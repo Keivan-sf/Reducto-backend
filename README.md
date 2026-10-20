@@ -1,7 +1,8 @@
 # Reducto backend
 
-Install dependencies with `pnpm install`. Install `ffmpeg` on the API server and
-make it available on `PATH`; GIF/video uploads use its H.264 encoder.
+Install dependencies with `pnpm install`. Install `ffmpeg` and `ffprobe` on the API server and
+make them available on `PATH`; GIF/video uploads use its H.264 encoder and
+video dimensions are read with ffprobe.
 
 Configure the local `.env` using `.env.example`, then run:
 
@@ -25,6 +26,44 @@ or GIF details again to obtain a fresh URL. Requests for GIF details require a
 bearer token, but the returned link plays without an Authorization header.
 `S3_ENDPOINT` must be reachable by clients playing the URL. For a message's GIF
 attachment, fetch `/api/gifs/:gifId` to resolve its ID into metadata and a playable URL.
+
+## Media dimensions
+
+GIF upload, library, and detail responses include `width` and `height` in pixels.
+These describe the stored MP4 after conversion. Image/video attachment uploads
+also return these fields. Clients can fetch them before downloading a file with:
+
+```http
+GET /api/conversations/:conversationId/attachments/:mediaId/metadata
+Authorization: Bearer <accessToken>
+```
+
+The response is `{ "attachment": { "id": "...", "type": "image", "width": 640,
+"height": 480, ... } }`. It includes the upload's other metadata and requires
+conversation membership. It reads only the database. The existing attachment
+GET endpoint continues to download the file. For GIF message references, use
+`GET /api/gifs/:gifId`. Width and height follow image EXIF/video rotation so
+clients can reserve the displayed aspect ratio. Audio, music, and documents
+return `null` for both dimensions.
+
+For an existing deployment, stop API instances running the old upload code,
+apply `pnpm run db:migrate`, deploy the updated API, and run:
+
+```sh
+pnpm run db:backfill-media-dimensions
+```
+
+Migration 0007 adds nullable columns without changing files or deleting records.
+Its `NOT VALID` checks require positive dimensions for all new GIFs, images, and
+videos immediately, while allowing historical rows to await backfill. The command
+reads missing dimensions from stored objects in batches, saves each successful
+result, and validates both database checks when no failures remain. These checks
+then require dimensions for all visual media, equivalent to conditional NOT NULL
+constraints; nonvisual attachments keep null dimensions. Historical responses may
+contain null dimensions until backfill completes. Missing or corrupt files are
+reported by record ID, preserved, and cause a nonzero exit status. Restore those
+objects and rerun the command; completed records are skipped. The command requires
+the same database/S3 environment variables as the server and ffprobe on PATH.
 
 Run offline tests with `pnpm test`, typecheck with `pnpm run typecheck`, and format
 code with `pnpm run format`.

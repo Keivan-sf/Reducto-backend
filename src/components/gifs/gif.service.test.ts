@@ -37,6 +37,7 @@ test("a user can store and remove their own GIF", async () => {
 		buffer: validGif,
 		mimetype: "image/gif",
 	});
+	expect(gif).toMatchObject({ width: 2, height: 2 });
 	expect(gif.objectKey).toMatch(/^gifs\/ada-id\/.*\.mp4$/);
 	expect(gif.playbackUrl).toBe(
 		`https://storage.example/${gif.objectKey}?signed=true`,
@@ -94,16 +95,26 @@ test("video uploads store converted bytes and size", async () => {
 	const repository = new InMemoryGifRepository(new Set(["ada-id"]));
 	const storage = new InMemoryObjectStorage();
 	const converted = Buffer.from("converted mp4");
-	const service = new GifService(repository, storage, {
-		async convertToMp4() {
-			return converted;
+	const service = new GifService(
+		repository,
+		storage,
+		{
+			async convertToMp4() {
+				return converted;
+			},
 		},
-	});
+		{
+			async read() {
+				return { width: 320, height: 180 };
+			},
+		},
+	);
 	const gif = await service.uploadGif("ada-id", {
 		buffer: Buffer.from("source video"),
 		mimetype: "video/webm",
 	});
 	expect(gif.fileSize).toBe(converted.length);
+	expect(gif).toMatchObject({ width: 320, height: 180 });
 	expect(storage.objects.get(gif.objectKey)).toEqual(converted);
 	expect(await service.listGifs("ada-id")).toEqual([gif]);
 });
@@ -126,11 +137,20 @@ test("uploads larger than 50 MB are rejected before conversion or storage", asyn
 test("GIF lookups and library lists generate fresh playback URLs without persisting them", async () => {
 	const repository = new InMemoryGifRepository(new Set(["ada-id"]));
 	const storage = new InMemoryObjectStorage();
-	const service = new GifService(repository, storage, {
-		async convertToMp4() {
-			return Buffer.from("mp4");
+	const service = new GifService(
+		repository,
+		storage,
+		{
+			async convertToMp4() {
+				return Buffer.from("mp4");
+			},
 		},
-	});
+		{
+			async read() {
+				return { width: 320, height: 180 };
+			},
+		},
+	);
 	const gif = await service.uploadGif("ada-id", {
 		buffer: Buffer.from("video"),
 		mimetype: "video/mp4",
@@ -159,11 +179,20 @@ test("a playback signing failure does not delete a successfully saved MP4", asyn
 	jest
 		.spyOn(storage, "getPlaybackUrl")
 		.mockRejectedValueOnce(new Error("Signing unavailable"));
-	const service = new GifService(repository, storage, {
-		async convertToMp4() {
-			return Buffer.from("mp4");
+	const service = new GifService(
+		repository,
+		storage,
+		{
+			async convertToMp4() {
+				return Buffer.from("mp4");
+			},
 		},
-	});
+		{
+			async read() {
+				return { width: 320, height: 180 };
+			},
+		},
+	);
 	await expect(
 		service.uploadGif("ada-id", {
 			buffer: Buffer.from("video"),

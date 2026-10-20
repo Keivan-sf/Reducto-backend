@@ -44,6 +44,34 @@ const operation = (
 });
 
 export const chatSchemas = {
+	Media: object({
+		id: uuid,
+		conversationId: uuid,
+		uploaderId: uuid,
+		type: {
+			type: "string",
+			enum: ["image", "video", "audio", "music", "document"],
+		},
+		objectKey: { type: "string" },
+		fileName: { type: "string" },
+		contentType: { type: "string" },
+		fileSize: { type: "integer" },
+		width: {
+			type: "integer",
+			minimum: 1,
+			nullable: true,
+			description:
+				"Display width in pixels; null for nonvisual files or historical files awaiting backfill",
+		},
+		height: {
+			type: "integer",
+			minimum: 1,
+			nullable: true,
+			description:
+				"Display height in pixels; null for nonvisual files or historical files awaiting backfill",
+		},
+		createdAt: { type: "string", format: "date-time" },
+	}),
 	MessageAttachment: {
 		oneOf: [
 			object({ type: { type: "string", enum: ["gif"] }, gifId: uuid }),
@@ -254,6 +282,7 @@ export const chatPaths = {
 				201,
 				undefined,
 				conversationParams,
+				object({ attachment: reference("Media") }),
 			),
 			requestBody: {
 				required: true,
@@ -270,6 +299,15 @@ export const chatPaths = {
 				},
 			},
 		},
+	},
+	"/api/conversations/{conversationId}/attachments/{mediaId}/metadata": {
+		get: operation(
+			"Get attachment metadata without downloading the file",
+			200,
+			undefined,
+			[...conversationParams, parameter("mediaId")],
+			object({ attachment: reference("Media") }),
+		),
 	},
 	"/api/conversations/{conversationId}/attachments/{mediaId}": {
 		get: operation("Download a conversation attachment", 200, undefined, [

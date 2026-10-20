@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+	check,
 	integer,
 	index,
 	foreignKey,
@@ -36,17 +38,28 @@ export const refreshTokens = pgTable("refresh_tokens", {
 		.notNull(),
 });
 
-export const gifs = pgTable("gifs", {
-	id: uuid("id").defaultRandom().primaryKey(),
-	userId: uuid("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "restrict" }),
-	objectKey: text("object_key").notNull().unique(),
-	fileSize: integer("file_size").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true })
-		.defaultNow()
-		.notNull(),
-});
+export const gifs = pgTable(
+	"gifs",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		userId: uuid("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		objectKey: text("object_key").notNull().unique(),
+		fileSize: integer("file_size").notNull(),
+		width: integer("width"),
+		height: integer("height"),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		check(
+			"gifs_dimensions_required",
+			sql`${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.width} > 0 AND ${table.height} > 0`,
+		),
+	],
+);
 
 export const userGifs = pgTable(
 	"user_gifs",
@@ -118,23 +131,34 @@ export const conversationMembers = pgTable(
 	],
 );
 
-export const conversationMedia = pgTable("conversation_media", {
-	id: uuid("id").defaultRandom().primaryKey(),
-	conversationId: uuid("conversation_id")
-		.notNull()
-		.references(() => conversations.id, { onDelete: "cascade" }),
-	uploaderId: uuid("uploader_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "restrict" }),
-	type: mediaType("type").notNull(),
-	objectKey: text("object_key").notNull(),
-	fileName: text("file_name").notNull(),
-	contentType: text("content_type").notNull(),
-	fileSize: integer("file_size").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true })
-		.defaultNow()
-		.notNull(),
-});
+export const conversationMedia = pgTable(
+	"conversation_media",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		conversationId: uuid("conversation_id")
+			.notNull()
+			.references(() => conversations.id, { onDelete: "cascade" }),
+		uploaderId: uuid("uploader_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "restrict" }),
+		type: mediaType("type").notNull(),
+		objectKey: text("object_key").notNull(),
+		fileName: text("file_name").notNull(),
+		contentType: text("content_type").notNull(),
+		fileSize: integer("file_size").notNull(),
+		width: integer("width"),
+		height: integer("height"),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		check(
+			"conversation_media_dimensions_required",
+			sql`(${table.type} IN ('image', 'video') AND ${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.width} > 0 AND ${table.height} > 0) OR (${table.type} NOT IN ('image', 'video') AND ${table.width} IS NULL AND ${table.height} IS NULL)`,
+		),
+	],
+);
 
 export const messages = pgTable(
 	"messages",

@@ -1,4 +1,5 @@
-import { expect, test } from "@jest/globals";
+import sharp from "sharp";
+import { expect, jest, test } from "@jest/globals";
 import express from "express";
 import request from "supertest";
 import { errorHandler } from "../../lib/http.js";
@@ -36,9 +37,10 @@ async function fixture() {
 		repository.users.add(account.user.id);
 	repository.usernames.set("alice", alice.user.id);
 	repository.usernames.set("bob_123", bob.user.id);
+	const storage = new MemoryChatStorage();
 	const service = new ConversationService(
 		repository,
-		new MemoryChatStorage(),
+		storage,
 		new MemoryNotifications(),
 	);
 	const app = express();
@@ -46,7 +48,7 @@ async function fixture() {
 	app.use("/api/conversations", createConversationRouter(auth, service));
 	app.use("/api/groups", createGroupRouter(auth, service));
 	app.use(errorHandler);
-	return { app, alice, bob, outsider };
+	return { app, alice, bob, outsider, storage };
 }
 
 test("HTTP messaging enforces authentication, membership, validated bodies, and attachment ownership", async () => {
@@ -295,5 +297,55 @@ test("HTTP message context validates counts and chat access", async () => {
 			`/api/conversations/${original.conversationId}/messages/${crypto.randomUUID()}/around`,
 		)
 		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(404);
+});
+
+test("image metadata exposes dimensions without reading the object and enforces chat access", async () => {
+	const { app, alice, bob, outsider, storage } = await fixture();
+	const created = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	const conversationId = created.body.conversation.id;
+	const base = `/api/conversations/${conversationId}/attachments`;
+	const image = await sharp({
+		create: { width: 80, height: 50, channels: 3, background: "blue" },
+	})
+		.png()
+		.toBuffer();
+	const uploaded = await request(app)
+		.post(base)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.attach("file", image, { filename: "photo.png", contentType: "image/png" })
+		.expect(201);
+	expect(uploaded.body.attachment).toMatchObject({ width: 80, height: 50 });
+	const path = `${base}/${uploaded.body.attachment.id}/metadata`;
+	const read = jest.spyOn(storage, "getObject");
+	const metadata = await request(app)
+		.get(path)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(metadata.body.attachment).toEqual(uploaded.body.attachment);
+	expect(read).not.toHaveBeenCalled();
+	await request(app).get(path).expect(401);
+	await request(app)
+		.get(path)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(403);
+	await request(app)
+		.get(`${base}/${crypto.randomUUID()}/metadata`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(404);
+	const other = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: outsider.user.id })
+		.expect(200);
+	await request(app)
+		.get(
+			`/api/conversations/${other.body.conversation.id}/attachments/${uploaded.body.attachment.id}/metadata`,
+		)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
 		.expect(404);
 });

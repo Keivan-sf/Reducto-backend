@@ -256,6 +256,18 @@ export function createConversationRouter(
 		}),
 	);
 	router.get(
+		"/:conversationId/attachments/:mediaId/metadata",
+		handle(async (request, response) => {
+			response.json({
+				attachment: await service.getAttachment(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					String(request.params.mediaId),
+				),
+			});
+		}),
+	);
+	router.get(
 		"/:conversationId/attachments/:mediaId",
 		handle(async (request, response) => {
 			const { media, body } = await service.downloadAttachment(

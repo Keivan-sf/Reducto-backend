@@ -1,3 +1,7 @@
+import {
+	MediaDimensionReader,
+	type DimensionReader,
+} from "../../lib/media-dimensions.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { HttpError } from "../../lib/http.js";
 import type { ObjectStorage } from "../../lib/object-storage.js";
@@ -30,6 +34,7 @@ export class ConversationService {
 		private readonly repository: ConversationRepository,
 		private readonly storage: ChatObjectStorage,
 		private readonly notifications: Notifications,
+		private readonly dimensions: DimensionReader = new MediaDimensionReader(),
 	) {}
 
 	private publicConversation(conversation: Conversation) {
@@ -482,6 +487,10 @@ export class ConversationService {
 				throw new HttpError(400, "Music must be an audio file");
 			type = "music";
 		}
+		const dimensions =
+			type === "image" || type === "video"
+				? await this.dimensions.read(file.buffer, type)
+				: { width: null, height: null };
 		const objectKey = `attachments/${conversationId}/${randomUUID()}`;
 		await this.storage.putObject({
 			key: objectKey,
@@ -497,6 +506,7 @@ export class ConversationService {
 				fileName: file.originalname,
 				contentType,
 				fileSize: file.buffer.length,
+				...dimensions,
 			});
 		} catch (error) {
 			await this.storage.deleteObject(objectKey);
@@ -504,15 +514,20 @@ export class ConversationService {
 		}
 	}
 
+	async getAttachment(userId: string, conversationId: string, mediaId: string) {
+		await this.requireMember(userId, conversationId);
+		const media = await this.repository.getMedia(mediaId);
+		if (!media || media.conversationId !== conversationId)
+			throw new HttpError(404, "Attachment not found");
+		return media;
+	}
+
 	async downloadAttachment(
 		userId: string,
 		conversationId: string,
 		mediaId: string,
 	) {
-		await this.requireMember(userId, conversationId);
-		const media = await this.repository.getMedia(mediaId);
-		if (!media || media.conversationId !== conversationId)
-			throw new HttpError(404, "Attachment not found");
+		const media = await this.getAttachment(userId, conversationId, mediaId);
 		return { media, body: await this.storage.getObject(media.objectKey) };
 	}
 }
