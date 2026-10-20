@@ -435,3 +435,107 @@ test("forwarding a reply does not copy a reference to the original chat", async 
 	expect(forwarded.replyToMessageId).toBeNull();
 	expect(forwarded.forwardedFrom?.messageId).toBe(reply.id);
 });
+
+test("message context returns the nearest 50 on each side in chronological order, including timestamp ties", async () => {
+	const { service, repository, owner, member } = fixture();
+	const chat = await service.createPrivate(owner, member);
+	const records = [];
+	for (let count = 0; count < 105; count++) {
+		const message = {
+			id: `00000000-0000-4000-8000-${String(count).padStart(12, "0")}`,
+			conversationId: chat.id,
+			senderId: owner,
+			text: String(count),
+			replyToMessageId: null,
+			attachment: null,
+			forwardedFrom: null,
+			createdAt: new Date(0),
+		};
+		repository.messages.set(message.id, message);
+		records.push(message);
+	}
+	await service.react(member, chat.id, records[51].id, "👍");
+	await service.react(member, chat.id, records[52].id, "❤️");
+	await service.react(member, chat.id, records[53].id, "🔥");
+	const context = await service.getMessagesAround(
+		owner,
+		chat.id,
+		records[52].id,
+	);
+	expect(context.message.id).toBe(records[52].id);
+	expect(context.before.map((message) => message.id)).toEqual(
+		records.slice(2, 52).map((message) => message.id),
+	);
+	expect(context.after.map((message) => message.id)).toEqual(
+		records.slice(53, 103).map((message) => message.id),
+	);
+	expect(context.hasMoreBefore).toBe(true);
+	expect(context.hasMoreAfter).toBe(true);
+	expect(context.before.at(-1)!.reactions[0].emoji).toBe("👍");
+	expect(context.message.reactions[0].emoji).toBe("❤️");
+	expect(context.after[0].reactions[0].emoji).toBe("🔥");
+	const first = await service.getMessagesAround(
+		owner,
+		chat.id,
+		records[0].id,
+		2,
+		3,
+	);
+	expect(first.before).toEqual([]);
+	expect(first.hasMoreBefore).toBe(false);
+	expect(first.after.map((message) => message.id)).toEqual(
+		records.slice(1, 4).map((message) => message.id),
+	);
+	const last = await service.getMessagesAround(
+		owner,
+		chat.id,
+		records[104].id,
+		2,
+		3,
+	);
+	expect(last.before.map((message) => message.id)).toEqual(
+		records.slice(102, 104).map((message) => message.id),
+	);
+	expect(last.after).toEqual([]);
+	expect(last.hasMoreAfter).toBe(false);
+	const anchorOnly = await service.getMessagesAround(
+		owner,
+		chat.id,
+		records[52].id,
+		0,
+		0,
+	);
+	expect(anchorOnly.before).toEqual([]);
+	expect(anchorOnly.after).toEqual([]);
+	expect(anchorOnly.hasMoreBefore).toBe(true);
+	expect(anchorOnly.hasMoreAfter).toBe(true);
+});
+
+test("message context requires membership and an anchor in the requested conversation", async () => {
+	const { service, owner, member, outsider } = fixture();
+	const original = await service.sendPrivate(owner, member, {
+		text: "Private",
+	});
+	const other = await service.createPrivate(owner, outsider);
+	await expect(
+		service.getMessagesAround(outsider, original.conversationId, original.id),
+	).rejects.toMatchObject({ status: 403 });
+	await expect(
+		service.getMessagesAround(owner, other.id, original.id),
+	).rejects.toMatchObject({ status: 404 });
+	await expect(
+		service.getMessagesAround(owner, other.id, randomUUID()),
+	).rejects.toMatchObject({ status: 404 });
+	await expect(
+		service.getMessagesAround(owner, other.id, original.id, 101),
+	).rejects.toMatchObject({ status: 400 });
+	const alone = await service.getMessagesAround(
+		member,
+		original.conversationId,
+		original.id,
+	);
+	expect(alone.before).toEqual([]);
+	expect(alone.after).toEqual([]);
+	expect(alone.hasMoreBefore).toBe(false);
+	expect(alone.hasMoreAfter).toBe(false);
+});

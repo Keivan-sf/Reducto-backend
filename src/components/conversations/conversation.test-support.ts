@@ -140,6 +140,25 @@ export class MemoryConversationRepository implements ConversationRepository {
 			)
 			.slice(0, limit);
 	}
+	async listMessagesAfter(
+		conversationId: string,
+		limit: number,
+		after: Message,
+	) {
+		return [...this.messages.values()]
+			.filter(
+				(message) =>
+					message.conversationId === conversationId &&
+					(message.createdAt > after.createdAt ||
+						(+message.createdAt === +after.createdAt && message.id > after.id)),
+			)
+			.sort(
+				(first, second) =>
+					+first.createdAt - +second.createdAt ||
+					(first.id > second.id ? 1 : -1),
+			)
+			.slice(0, limit);
+	}
 	async createMedia(input: Omit<Media, "id" | "createdAt">) {
 		const media = { ...input, id: randomUUID(), createdAt: new Date() };
 		this.media.set(media.id, media);

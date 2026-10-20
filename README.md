@@ -85,6 +85,15 @@ Username and user ID lookups reuse the same private conversation. Changing a
 username does not change existing chats. Unknown usernames return `404`, and
 starting a chat with yourself returns `400`.
 
+To jump to a message with context, use
+`GET /api/conversations/:id/messages/:messageId/around?before=50&after=50`.
+It returns `{ message, before, after, hasMoreBefore, hasMoreAfter }`. Both counts
+default to 50 and accept integers from 0 to 100. The target appears only in
+`message`; `before` and `after` contain the closest older/newer messages, each in
+chronological order. All returned messages include reactions and reply references.
+Ordering uses creation time with message ID as a tiebreaker. Access requires
+conversation membership; a missing target or one from another chat returns `404`.
+
 Message bodies accept `text` (up to 10,000 characters), a single `attachment`,
 and an optional `replyToMessageId`:
 

@@ -112,6 +112,41 @@ const messageResult = object({ message: reference("Message") });
 const conversationResult = object({ conversation: reference("Conversation") });
 
 export const chatPaths = {
+	"/api/conversations/{conversationId}/messages/{messageId}/around": {
+		get: operation(
+			"Get the target message and its nearest older/newer messages",
+			200,
+			undefined,
+			[
+				...messageParams,
+				{
+					name: "before",
+					in: "query",
+					schema: { type: "integer", minimum: 0, maximum: 100, default: 50 },
+				},
+				{
+					name: "after",
+					in: "query",
+					schema: { type: "integer", minimum: 0, maximum: 100, default: 50 },
+				},
+			],
+			object({
+				message: reference("Message"),
+				before: {
+					type: "array",
+					items: reference("Message"),
+					description: "Nearest older messages, oldest first",
+				},
+				after: {
+					type: "array",
+					items: reference("Message"),
+					description: "Nearest newer messages, oldest first",
+				},
+				hasMoreBefore: { type: "boolean" },
+				hasMoreAfter: { type: "boolean" },
+			}),
+		),
+	},
 	"/api/conversations/{conversationId}/messages/{messageId}": {
 		get: operation(
 			"Get a message, including a reply target outside the current history page",

@@ -17,6 +17,7 @@ import {
 	parseInput,
 	reactionSchema,
 	usernameSchema,
+	aroundMessagesSchema,
 } from "./conversation.validation.js";
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
@@ -350,6 +351,49 @@ export class ConversationService {
 				),
 			})),
 			nextCursor: records.length > limit ? page.at(-1)!.id : null,
+		};
+	}
+
+	async getMessagesAround(
+		userId: string,
+		conversationId: string,
+		messageId: string,
+		beforeCount = 50,
+		afterCount = 50,
+	) {
+		const counts = parseInput(aroundMessagesSchema, {
+			before: beforeCount,
+			after: afterCount,
+		});
+		await this.requireMember(userId, conversationId);
+		const target = await this.repository.getMessage(messageId);
+		if (!target || target.conversationId !== conversationId)
+			throw new HttpError(404, "Message not found");
+		const [older, newer] = await Promise.all([
+			this.repository.listMessages(conversationId, counts.before + 1, target),
+			this.repository.listMessagesAfter(
+				conversationId,
+				counts.after + 1,
+				target,
+			),
+		]);
+		const before = older.slice(0, counts.before).reverse();
+		const after = newer.slice(0, counts.after);
+		const reactions = await this.repository.listReactions(
+			[...before, target, ...after].map((message) => message.id),
+		);
+		const withReactions = (message: Message) => ({
+			...message,
+			reactions: reactions.filter(
+				(reaction) => reaction.messageId === message.id,
+			),
+		});
+		return {
+			message: withReactions(target),
+			before: before.map(withReactions),
+			after: after.map(withReactions),
+			hasMoreBefore: older.length > counts.before,
+			hasMoreAfter: newer.length > counts.after,
 		};
 	}
 

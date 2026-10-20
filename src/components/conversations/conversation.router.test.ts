@@ -242,3 +242,58 @@ test("HTTP replies work through username and conversation routes, with same-chat
 		.send({ text: "Wrong chat", replyToMessageId: original.id })
 		.expect(400);
 });
+
+test("HTTP message context validates counts and chat access", async () => {
+	const { app, alice, bob, outsider } = await fixture();
+	const sent = await request(app)
+		.post(`/api/conversations/private/${bob.user.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Anchor" })
+		.expect(201);
+	const original = sent.body.message;
+	const base = `/api/conversations/${original.conversationId}/messages/${original.id}/around`;
+	const result = await request(app)
+		.get(base)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(result.body).toEqual({
+		message: { ...original, reactions: [] },
+		before: [],
+		after: [],
+		hasMoreBefore: false,
+		hasMoreAfter: false,
+	});
+	await request(app)
+		.get(`${base}?before=0&after=0`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	await request(app).get(base).expect(401);
+	await request(app)
+		.get(base)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(403);
+	for (const query of [
+		"before=101",
+		"after=-1",
+		"before=1.5",
+		"after=invalid",
+		"other=1",
+	]) {
+		await request(app)
+			.get(`${base}?${query}`)
+			.auth(bob.tokens.accessToken, { type: "bearer" })
+			.expect(400);
+	}
+	await request(app)
+		.get(
+			`/api/conversations/${original.conversationId}/messages/not-an-id/around`,
+		)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(400);
+	await request(app)
+		.get(
+			`/api/conversations/${original.conversationId}/messages/${crypto.randomUUID()}/around`,
+		)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(404);
+});

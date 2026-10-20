@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import type { createDatabase } from "../../db/client.js";
 import {
 	conversationMedia,
@@ -52,6 +52,11 @@ export interface ConversationRepository {
 		conversationId: string,
 		limit: number,
 		before?: Message,
+	): Promise<Message[]>;
+	listMessagesAfter(
+		conversationId: string,
+		limit: number,
+		after: Message,
 	): Promise<Message[]>;
 	createMedia(media: Omit<Media, "id" | "createdAt">): Promise<Media>;
 	getMedia(id: string): Promise<Media | undefined>;
@@ -233,20 +238,38 @@ export class DrizzleConversationRepository implements ConversationRepository {
 	}
 
 	listMessages(conversationId: string, limit: number, before?: Message) {
+		const timestamp = before
+			? sql`(select created_at from messages where id = ${before.id})`
+			: undefined;
 		return this.database.query.messages.findMany({
 			where: and(
 				eq(messages.conversationId, conversationId),
 				before
 					? or(
-							lt(messages.createdAt, before.createdAt),
+							lt(messages.createdAt, timestamp!),
 							and(
-								eq(messages.createdAt, before.createdAt),
+								eq(messages.createdAt, timestamp!),
 								lt(messages.id, before.id),
 							),
 						)
 					: undefined,
 			),
 			orderBy: [desc(messages.createdAt), desc(messages.id)],
+			limit,
+		});
+	}
+
+	listMessagesAfter(conversationId: string, limit: number, after: Message) {
+		const timestamp = sql`(select created_at from messages where id = ${after.id})`;
+		return this.database.query.messages.findMany({
+			where: and(
+				eq(messages.conversationId, conversationId),
+				or(
+					gt(messages.createdAt, timestamp),
+					and(eq(messages.createdAt, timestamp), gt(messages.id, after.id)),
+				),
+			),
+			orderBy: [asc(messages.createdAt), asc(messages.id)],
 			limit,
 		});
 	}

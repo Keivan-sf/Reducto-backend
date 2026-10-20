@@ -20,6 +20,7 @@ import {
 	reactionSchema,
 	privateRecipientSchema,
 	usernameSchema,
+	aroundMessagesSchema,
 } from "./conversation.validation.js";
 
 export function handle(
@@ -155,6 +156,21 @@ export function createConversationRouter(
 					String(request.params.messageId),
 				),
 			});
+		}),
+	);
+	router.get(
+		"/:conversationId/messages/:messageId/around",
+		handle(async (request, response) => {
+			const counts = parseInput(aroundMessagesSchema, request.query);
+			response.json(
+				await service.getMessagesAround(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					String(request.params.messageId),
+					counts.before,
+					counts.after,
+				),
+			);
 		}),
 	);
 	router.post(

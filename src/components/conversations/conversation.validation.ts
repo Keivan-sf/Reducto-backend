@@ -52,6 +52,13 @@ export const pageSchema = z
 	})
 	.strict();
 
+export const aroundMessagesSchema = z
+	.object({
+		before: z.coerce.number().int().min(0).max(100).default(50),
+		after: z.coerce.number().int().min(0).max(100).default(50),
+	})
+	.strict();
+
 export function parseInput<Output>(
 	schema: z.ZodType<Output>,
 	input: unknown,
