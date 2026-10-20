@@ -6,6 +6,7 @@
 		"typecheck": "tsc --noEmit",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
+		"db:backfill-video-thumbnails": "tsx src/db/backfill-video-thumbnails.cli.ts",
 		"db:backfill-media-dimensions": "tsx src/db/backfill-media-dimensions.cli.ts",
 		"format": "prettier --write \"src/**/*.{ts,json}\" \"drizzle/**/*.json\" \"*.{ts,cjs,json,yml,yaml}\"",
 		"format:check": "prettier --check \"src/**/*.{ts,json}\" \"drizzle/**/*.json\" \"*.{ts,cjs,json,yml,yaml}\""

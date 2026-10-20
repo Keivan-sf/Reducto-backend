@@ -10,11 +10,21 @@ export const gifSchemas = {
 			"height",
 			"createdAt",
 			"playbackUrl",
+			"thumbnailKey",
+			"thumbnailUrl",
 		],
 		properties: {
 			id: { type: "string", format: "uuid" },
 			userId: { type: "string", format: "uuid" },
 			objectKey: { type: "string" },
+			thumbnailKey: { type: "string", nullable: true },
+			thumbnailUrl: {
+				type: "string",
+				format: "uri",
+				nullable: true,
+				description:
+					"First-frame JPEG of the stored MP4, valid for 15 minutes. Fetch details or the library to refresh. Null only before historical backfill. Uses the GIF dimensions.",
+			},
 			fileSize: { type: "integer", description: "Converted MP4 size in bytes" },
 			width: {
 				type: "integer",

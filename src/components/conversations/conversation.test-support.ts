@@ -193,6 +193,9 @@ export class MemoryChatStorage implements ChatObjectStorage {
 	async putObject(input: { key: string; body: Buffer }) {
 		this.objects.set(input.key, input.body);
 	}
+	async getThumbnailUrl(key: string) {
+		return `https://storage.example/${key}?signed=true`;
+	}
 	async getObject(key: string) {
 		return this.objects.get(key)!;
 	}

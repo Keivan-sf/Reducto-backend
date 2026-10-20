@@ -6,6 +6,7 @@ export type UserGif = {
 	id: string;
 	userId: string;
 	objectKey: string;
+	thumbnailKey: string | null;
 	fileSize: number;
 	width: number | null;
 	height: number | null;

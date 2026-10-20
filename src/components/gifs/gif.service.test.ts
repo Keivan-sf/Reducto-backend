@@ -17,6 +17,10 @@ class InMemoryObjectStorage implements GifObjectStorage {
 		this.objects.delete(key);
 	}
 
+	async getThumbnailUrl(key: string) {
+		return `https://storage.example/${key}?signed=true`;
+	}
+
 	async getPlaybackUrl(key: string) {
 		return `https://storage.example/${key}?signed=true`;
 	}
@@ -38,6 +42,10 @@ test("a user can store and remove their own GIF", async () => {
 		mimetype: "image/gif",
 	});
 	expect(gif).toMatchObject({ width: 2, height: 2 });
+	expect(storage.objects.has(gif.thumbnailKey!)).toBe(true);
+	expect(gif.thumbnailUrl).toBe(
+		`https://storage.example/${gif.thumbnailKey}?signed=true`,
+	);
 	expect(gif.objectKey).toMatch(/^gifs\/ada-id\/.*\.mp4$/);
 	expect(gif.playbackUrl).toBe(
 		`https://storage.example/${gif.objectKey}?signed=true`,
@@ -62,7 +70,7 @@ test("libraries share a stable GIF ID and removal does not delete the GIF", asyn
 	await service.addToLibrary("grace-id", gif.id);
 	expect(await service.listGifs("grace-id")).toEqual([gif]);
 	await service.deleteGif("ada-id", gif.id);
-	const { playbackUrl, ...record } = gif;
+	const { playbackUrl, thumbnailUrl, ...record } = gif;
 	expect(await repository.findGif(gif.id)).toEqual(record);
 	expect(await service.listGifs("grace-id")).toEqual([gif]);
 	expect(storage.objects.has(gif.objectKey)).toBe(true);
@@ -108,6 +116,11 @@ test("video uploads store converted bytes and size", async () => {
 				return { width: 320, height: 180 };
 			},
 		},
+		{
+			async generate() {
+				return Buffer.from("jpeg");
+			},
+		},
 	);
 	const gif = await service.uploadGif("ada-id", {
 		buffer: Buffer.from("source video"),
@@ -150,6 +163,11 @@ test("GIF lookups and library lists generate fresh playback URLs without persist
 				return { width: 320, height: 180 };
 			},
 		},
+		{
+			async generate() {
+				return Buffer.from("jpeg");
+			},
+		},
 	);
 	const gif = await service.uploadGif("ada-id", {
 		buffer: Buffer.from("video"),
@@ -190,6 +208,11 @@ test("a playback signing failure does not delete a successfully saved MP4", asyn
 		{
 			async read() {
 				return { width: 320, height: 180 };
+			},
+		},
+		{
+			async generate() {
+				return Buffer.from("jpeg");
 			},
 		},
 	);

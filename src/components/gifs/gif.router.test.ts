@@ -29,6 +29,9 @@ test("authenticated GIF responses include playable links on upload, library list
 	const storage: GifObjectStorage = {
 		async putObject() {},
 		async deleteObject() {},
+		async getThumbnailUrl(key) {
+			return `https://storage.example/${key}?signed=true`;
+		},
 		async getPlaybackUrl(key) {
 			return `https://storage.example/${key}?signed=true`;
 		},
@@ -46,6 +49,11 @@ test("authenticated GIF responses include playable links on upload, library list
 				return { width: 640, height: 360 };
 			},
 		},
+		{
+			async generate() {
+				return Buffer.from("jpeg");
+			},
+		},
 	);
 	const app = express();
 	app.use("/api/gifs", createGifRouter(auth, service));
@@ -60,6 +68,9 @@ test("authenticated GIF responses include playable links on upload, library list
 		.expect(201);
 	const gif = uploaded.body.gif;
 	expect(gif).toMatchObject({ width: 640, height: 360 });
+	expect(gif.thumbnailUrl).toBe(
+		`https://storage.example/${gif.thumbnailKey}?signed=true`,
+	);
 	expect(gif.playbackUrl).toBe(
 		`https://storage.example/${gif.objectKey}?signed=true`,
 	);
@@ -103,5 +114,20 @@ test("MP4 playback links sign the stored object with inline video headers and a 
 	expect(url.searchParams.get("X-Amz-Expires")).toBe("900");
 	expect(url.searchParams.get("response-content-type")).toBe("video/mp4");
 	expect(url.searchParams.get("response-content-disposition")).toBe("inline");
+	expect(url.searchParams.get("X-Amz-Signature")).toMatch(/^[a-f0-9]{64}$/);
+});
+
+test("thumbnail URLs sign an inline JPEG with a 15-minute expiry", async () => {
+	const storage = new S3ObjectStorage({
+		endpoint: "http://localhost:9000",
+		bucket: "reducto",
+		accessKeyId: "test-access",
+		secretAccessKey: "test-secret",
+	});
+	const url = new URL(await storage.getThumbnailUrl("thumbnails/video.jpg"));
+	expect(url.pathname).toBe("/reducto/thumbnails/video.jpg");
+	expect(url.searchParams.get("response-content-type")).toBe("image/jpeg");
+	expect(url.searchParams.get("response-content-disposition")).toBe("inline");
+	expect(url.searchParams.get("X-Amz-Expires")).toBe("900");
 	expect(url.searchParams.get("X-Amz-Signature")).toMatch(/^[a-f0-9]{64}$/);
 });

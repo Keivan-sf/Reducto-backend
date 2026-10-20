@@ -65,6 +65,45 @@ reported by record ID, preserved, and cause a nonzero exit status. Restore those
 objects and rerun the command; completed records are skipped. The command requires
 the same database/S3 environment variables as the server and ffprobe on PATH.
 
+## Video thumbnails
+
+Every video attachment and GIF (stored as MP4) has a JPEG thumbnail of its first
+frame in object storage under `thumbnails/`. Video uploads fail if thumbnail
+creation or storage fails, so new video records always have a thumbnail.
+Forwarding preserves the thumbnail reference. Thumbnail dimensions match the
+video's display dimensions, including rotation; no separate thumbnail width or
+height is stored.
+
+Attachment uploads and `GET /api/conversations/:conversationId/attachments/:mediaId/metadata`
+return `thumbnailKey` and `thumbnailUrl` alongside the existing metadata. The URL
+is presigned for 15 minutes and can be used directly as an image source without
+an Authorization header. Fetch metadata again to renew it. Reading metadata
+requires conversation membership and does not download the video. Both thumbnail
+fields are null for nonvideo attachments. GIF upload, detail, and library responses
+also include these fields, using the stored MP4's first frame.
+
+For an existing deployment, stop API instances running the old upload code,
+apply `pnpm run db:migrate`, deploy the updated code, and run:
+
+```sh
+pnpm run db:backfill-video-thumbnails
+```
+
+Migration 0008 adds nullable thumbnail references and database checks that require
+a nonempty reference for every new video/GIF. The backfill processes missing
+thumbnails in batches and validates the checks against historical records only
+when every file succeeds. It preserves original media and records, reports
+failures by ID, and exits with a nonzero status on failure. Fix missing/corrupt
+source objects or storage errors and rerun it; completed rows are skipped.
+Deterministic backfill keys prevent duplicate thumbnail objects after a failed
+database update. Metadata may have null thumbnails until backfill completes.
+
+If upgrading from before the dimensions migration, run the thumbnail backfill
+first, then `pnpm run db:backfill-media-dimensions`. Thumbnail backfill also fills
+missing video dimensions from the generated first frame without replacing existing
+dimensions. Both commands use the server's database/S3 configuration and require
+FFmpeg/ffprobe on PATH.
+
 Run offline tests with `pnpm test`, typecheck with `pnpm run typecheck`, and format
 code with `pnpm run format`.
 

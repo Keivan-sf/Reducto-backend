@@ -1,4 +1,8 @@
 import {
+	FfmpegThumbnailGenerator,
+	type ThumbnailGenerator,
+} from "../../lib/video-thumbnail.js";
+import {
 	MediaDimensionReader,
 	type DimensionReader,
 } from "../../lib/media-dimensions.js";
@@ -15,9 +19,13 @@ export const MAX_GIF_SIZE_BYTES = 50 * 1024 * 1024;
 
 export interface GifObjectStorage extends ObjectStorage {
 	getPlaybackUrl(key: string): Promise<string>;
+	getThumbnailUrl(key: string): Promise<string>;
 }
 
-export type GifDetails = UserGif & { playbackUrl: string };
+export type GifDetails = UserGif & {
+	playbackUrl: string;
+	thumbnailUrl: string | null;
+};
 
 export class GifService {
 	constructor(
@@ -25,6 +33,7 @@ export class GifService {
 		private readonly objectStorage: GifObjectStorage,
 		private readonly converter: GifConverter = new FfmpegGifConverter(),
 		private readonly dimensions: DimensionReader = new MediaDimensionReader(),
+		private readonly thumbnails: ThumbnailGenerator = new FfmpegThumbnailGenerator(),
 	) {}
 
 	async uploadGif(
@@ -47,22 +56,33 @@ export class GifService {
 
 		const converted = await this.converter.convertToMp4(gif.buffer);
 		const dimensions = await this.dimensions.read(converted, "video");
+		const thumbnail = await this.thumbnails.generate(converted);
+		const thumbnailKey = `thumbnails/gifs/${userId}/${randomUUID()}.jpg`;
 		const objectKey = `gifs/${userId}/${randomUUID()}.mp4`;
-		await this.objectStorage.putObject({
-			key: objectKey,
-			body: converted,
-			contentType: "video/mp4",
-		});
 		let record: UserGif;
 		try {
+			await this.objectStorage.putObject({
+				key: objectKey,
+				body: converted,
+				contentType: "video/mp4",
+			});
+			await this.objectStorage.putObject({
+				key: thumbnailKey,
+				body: thumbnail,
+				contentType: "image/jpeg",
+			});
 			record = await this.repository.createGif({
 				userId,
 				objectKey,
+				thumbnailKey,
 				fileSize: converted.length,
 				...dimensions,
 			});
 		} catch (error) {
-			await this.objectStorage.deleteObject(objectKey);
+			await Promise.allSettled([
+				this.objectStorage.deleteObject(objectKey),
+				this.objectStorage.deleteObject(thumbnailKey),
+			]);
 			throw error;
 		}
 		return this.withPlaybackUrl(record);
@@ -72,6 +92,9 @@ export class GifService {
 		return {
 			...gif,
 			playbackUrl: await this.objectStorage.getPlaybackUrl(gif.objectKey),
+			thumbnailUrl: gif.thumbnailKey
+				? await this.objectStorage.getThumbnailUrl(gif.thumbnailKey)
+				: null,
 		};
 	}
 

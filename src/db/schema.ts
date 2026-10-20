@@ -46,6 +46,7 @@ export const gifs = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "restrict" }),
 		objectKey: text("object_key").notNull().unique(),
+		thumbnailKey: text("thumbnail_key"),
 		fileSize: integer("file_size").notNull(),
 		width: integer("width"),
 		height: integer("height"),
@@ -57,6 +58,10 @@ export const gifs = pgTable(
 		check(
 			"gifs_dimensions_required",
 			sql`${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.width} > 0 AND ${table.height} > 0`,
+		),
+		check(
+			"gifs_thumbnail_required",
+			sql`${table.thumbnailKey} IS NOT NULL AND length(${table.thumbnailKey}) > 0`,
 		),
 	],
 );
@@ -143,6 +148,7 @@ export const conversationMedia = pgTable(
 			.references(() => users.id, { onDelete: "restrict" }),
 		type: mediaType("type").notNull(),
 		objectKey: text("object_key").notNull(),
+		thumbnailKey: text("thumbnail_key"),
 		fileName: text("file_name").notNull(),
 		contentType: text("content_type").notNull(),
 		fileSize: integer("file_size").notNull(),
@@ -156,6 +162,10 @@ export const conversationMedia = pgTable(
 		check(
 			"conversation_media_dimensions_required",
 			sql`(${table.type} IN ('image', 'video') AND ${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.width} > 0 AND ${table.height} > 0) OR (${table.type} NOT IN ('image', 'video') AND ${table.width} IS NULL AND ${table.height} IS NULL)`,
+		),
+		check(
+			"conversation_media_thumbnail_required",
+			sql`(${table.type} = 'video' AND ${table.thumbnailKey} IS NOT NULL AND length(${table.thumbnailKey}) > 0) OR (${table.type} <> 'video' AND ${table.thumbnailKey} IS NULL)`,
 		),
 	],
 );

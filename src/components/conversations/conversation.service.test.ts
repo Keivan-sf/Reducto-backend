@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { expect, test } from "@jest/globals";
+import { expect, jest, test } from "@jest/globals";
 import { randomUUID } from "node:crypto";
 import { ConversationService } from "./conversation.service.js";
 import {
@@ -251,11 +251,21 @@ test("history pagination uses a stable cursor even when timestamps tie", async (
 test("all attachment types are stored with their type and only members can upload", async () => {
 	const { repository, storage, notifications, owner, member, outsider } =
 		fixture();
-	const service = new ConversationService(repository, storage, notifications, {
-		async read() {
-			return { width: 640, height: 360 };
+	const service = new ConversationService(
+		repository,
+		storage,
+		notifications,
+		{
+			async read() {
+				return { width: 640, height: 360 };
+			},
 		},
-	});
+		{
+			async generate() {
+				return Buffer.from("jpeg");
+			},
+		},
+	);
 	const chat = await service.createPrivate(owner, member);
 	const inputs = [
 		{ mimetype: "image/png", type: "image" },
@@ -276,13 +286,16 @@ test("all attachment types are stored with their type and only members can uploa
 			input.kind,
 		);
 		expect(media.type).toBe(input.type);
+		expect(media.thumbnailUrl).toEqual(
+			input.type === "video" ? expect.any(String) : null,
+		);
 		expect(media).toMatchObject(
 			input.type === "image" || input.type === "video"
 				? { width: 640, height: 360 }
 				: { width: null, height: null },
 		);
 	}
-	expect(storage.objects.size).toBe(5);
+	expect(storage.objects.size).toBe(6);
 	await expect(
 		service.uploadAttachment(outsider, chat.id, {
 			buffer: Buffer.from("secret"),
@@ -290,7 +303,7 @@ test("all attachment types are stored with their type and only members can uploa
 			mimetype: "image/png",
 		}),
 	).rejects.toMatchObject({ status: 403 });
-	expect(storage.objects.size).toBe(5);
+	expect(storage.objects.size).toBe(6);
 });
 
 test("private chats reject self-messaging and nonexistent recipients", async () => {
@@ -591,4 +604,118 @@ test("image dimensions survive forwarding and invalid visual uploads are never s
 		).rejects.toMatchObject({ status: 400 });
 	}
 	expect(storage.objects.size).toBe(1);
+});
+
+test.each(["generation", "storage", "database"])(
+	"video upload fails without saving incomplete records after %s errors",
+	async (stage) => {
+		const { repository, storage, notifications, owner, member } = fixture();
+		const generate = jest.fn(async () => Buffer.from("jpeg"));
+		const service = new ConversationService(
+			repository,
+			storage,
+			notifications,
+			{
+				async read() {
+					return { width: 80, height: 40 };
+				},
+			},
+			{ generate },
+		);
+		const chat = await service.createPrivate(owner, member);
+		if (stage === "generation")
+			generate.mockRejectedValueOnce(new Error("Generation failed"));
+		if (stage === "storage")
+			jest.spyOn(storage, "putObject").mockImplementation(async (input) => {
+				storage.objects.set(input.key, input.body);
+				if (input.key.startsWith("thumbnails/"))
+					throw new Error("Storage failed");
+			});
+		if (stage === "database")
+			jest
+				.spyOn(repository, "createMedia")
+				.mockRejectedValueOnce(new Error("Database failed"));
+		await expect(
+			service.uploadAttachment(owner, chat.id, {
+				buffer: Buffer.from("video"),
+				mimetype: "video/mp4",
+				originalname: "video.mp4",
+			}),
+		).rejects.toThrow();
+		expect(repository.media.size).toBe(0);
+		expect(storage.objects.size).toBe(0);
+	},
+);
+
+test("video thumbnails survive forwarding, refresh URLs, and do not block downloads if signing fails", async () => {
+	const { repository, storage, notifications, owner, member, outsider } =
+		fixture();
+	const service = new ConversationService(
+		repository,
+		storage,
+		notifications,
+		{
+			async read() {
+				return { width: 80, height: 40 };
+			},
+		},
+		{
+			async generate() {
+				return Buffer.from("jpeg");
+			},
+		},
+	);
+	const source = await service.createPrivate(owner, member);
+	const target = await service.createPrivate(owner, outsider);
+	const media = await service.uploadAttachment(owner, source.id, {
+		buffer: Buffer.from("video"),
+		mimetype: "video/mp4",
+		originalname: "video.mp4",
+	});
+	expect(storage.objects.get(media.thumbnailKey!)).toEqual(Buffer.from("jpeg"));
+	const message = await service.sendMessage(owner, source.id, {
+		attachment: { type: "video", mediaId: media.id },
+	});
+	const forwarded = await service.forwardMessage(owner, target.id, message.id);
+	if (forwarded.attachment?.type !== "video") throw new Error("Expected video");
+	const signer = jest
+		.spyOn(storage, "getThumbnailUrl")
+		.mockResolvedValueOnce("https://storage.example/first")
+		.mockResolvedValueOnce("https://storage.example/refreshed");
+	expect(
+		(
+			await service.getAttachment(
+				outsider,
+				target.id,
+				forwarded.attachment.mediaId,
+			)
+		).thumbnailUrl,
+	).toBe("https://storage.example/first");
+	expect(
+		(
+			await service.getAttachment(
+				outsider,
+				target.id,
+				forwarded.attachment.mediaId,
+			)
+		).thumbnailUrl,
+	).toBe("https://storage.example/refreshed");
+	expect(signer).toHaveBeenCalledWith(media.thumbnailKey!);
+	expect(await repository.getMedia(forwarded.attachment.mediaId)).toMatchObject(
+		{ thumbnailKey: media.thumbnailKey },
+	);
+	expect(await repository.getMedia(media.id)).not.toHaveProperty(
+		"thumbnailUrl",
+	);
+	signer.mockRejectedValue(new Error("Signing unavailable"));
+	expect(
+		(
+			await service.downloadAttachment(
+				outsider,
+				target.id,
+				forwarded.attachment.mediaId,
+			)
+		).body,
+	).toEqual(Buffer.from("video"));
+	expect(storage.objects.size).toBe(2);
 });

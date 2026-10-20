@@ -53,6 +53,14 @@ export const chatSchemas = {
 			enum: ["image", "video", "audio", "music", "document"],
 		},
 		objectKey: { type: "string" },
+		thumbnailKey: { type: "string", nullable: true },
+		thumbnailUrl: {
+			type: "string",
+			format: "uri",
+			nullable: true,
+			description:
+				"First-frame JPEG URL, valid for 15 minutes. Refresh metadata to renew. Null for nonvideo attachments or historical videos awaiting backfill. Uses the video dimensions.",
+		},
 		fileName: { type: "string" },
 		contentType: { type: "string" },
 		fileSize: { type: "integer" },

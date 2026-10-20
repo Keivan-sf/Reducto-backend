@@ -1,4 +1,8 @@
 import {
+	FfmpegThumbnailGenerator,
+	type ThumbnailGenerator,
+} from "../../lib/video-thumbnail.js";
+import {
 	MediaDimensionReader,
 	type DimensionReader,
 } from "../../lib/media-dimensions.js";
@@ -9,6 +13,7 @@ import type { Notifications } from "../../realtime/notifications.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type {
 	Conversation,
+	Media,
 	MediaType,
 	Message,
 	MessagePage,
@@ -27,6 +32,7 @@ import {
 export const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
 export interface ChatObjectStorage extends ObjectStorage {
 	getObject(key: string): Promise<Buffer>;
+	getThumbnailUrl(key: string): Promise<string>;
 }
 
 export class ConversationService {
@@ -35,6 +41,7 @@ export class ConversationService {
 		private readonly storage: ChatObjectStorage,
 		private readonly notifications: Notifications,
 		private readonly dimensions: DimensionReader = new MediaDimensionReader(),
+		private readonly thumbnails: ThumbnailGenerator = new FfmpegThumbnailGenerator(),
 	) {}
 
 	private publicConversation(conversation: Conversation) {
@@ -491,30 +498,51 @@ export class ConversationService {
 			type === "image" || type === "video"
 				? await this.dimensions.read(file.buffer, type)
 				: { width: null, height: null };
+		const thumbnail =
+			type === "video" ? await this.thumbnails.generate(file.buffer) : null;
+		const thumbnailKey = thumbnail
+			? `thumbnails/attachments/${conversationId}/${randomUUID()}.jpg`
+			: null;
 		const objectKey = `attachments/${conversationId}/${randomUUID()}`;
-		await this.storage.putObject({
-			key: objectKey,
-			body: file.buffer,
-			contentType,
-		});
+		let media: Media;
 		try {
-			return await this.repository.createMedia({
+			await this.storage.putObject({
+				key: objectKey,
+				body: file.buffer,
+				contentType,
+			});
+			if (thumbnail && thumbnailKey)
+				await this.storage.putObject({
+					key: thumbnailKey,
+					body: thumbnail,
+					contentType: "image/jpeg",
+				});
+			media = await this.repository.createMedia({
 				conversationId,
 				uploaderId: userId,
 				type,
 				objectKey,
+				thumbnailKey,
 				fileName: file.originalname,
 				contentType,
 				fileSize: file.buffer.length,
 				...dimensions,
 			});
 		} catch (error) {
-			await this.storage.deleteObject(objectKey);
+			await Promise.allSettled([
+				this.storage.deleteObject(objectKey),
+				...(thumbnailKey ? [this.storage.deleteObject(thumbnailKey)] : []),
+			]);
 			throw error;
 		}
+		return this.withThumbnailUrl(media);
 	}
 
-	async getAttachment(userId: string, conversationId: string, mediaId: string) {
+	private async findAttachment(
+		userId: string,
+		conversationId: string,
+		mediaId: string,
+	) {
 		await this.requireMember(userId, conversationId);
 		const media = await this.repository.getMedia(mediaId);
 		if (!media || media.conversationId !== conversationId)
@@ -522,12 +550,27 @@ export class ConversationService {
 		return media;
 	}
 
+	private async withThumbnailUrl(media: Media) {
+		return {
+			...media,
+			thumbnailUrl: media.thumbnailKey
+				? await this.storage.getThumbnailUrl(media.thumbnailKey)
+				: null,
+		};
+	}
+
+	async getAttachment(userId: string, conversationId: string, mediaId: string) {
+		return this.withThumbnailUrl(
+			await this.findAttachment(userId, conversationId, mediaId),
+		);
+	}
+
 	async downloadAttachment(
 		userId: string,
 		conversationId: string,
 		mediaId: string,
 	) {
-		const media = await this.getAttachment(userId, conversationId, mediaId);
+		const media = await this.findAttachment(userId, conversationId, mediaId);
 		return { media, body: await this.storage.getObject(media.objectKey) };
 	}
 }

@@ -1,0 +1,4 @@
+ALTER TABLE "conversation_media" ADD COLUMN "thumbnail_key" text;--> statement-breakpoint
+ALTER TABLE "gifs" ADD COLUMN "thumbnail_key" text;--> statement-breakpoint
+ALTER TABLE "conversation_media" ADD CONSTRAINT "conversation_media_thumbnail_required" CHECK (("conversation_media"."type" = 'video' AND "conversation_media"."thumbnail_key" IS NOT NULL AND length("conversation_media"."thumbnail_key") > 0) OR ("conversation_media"."type" <> 'video' AND "conversation_media"."thumbnail_key" IS NULL)) NOT VALID;--> statement-breakpoint
+ALTER TABLE "gifs" ADD CONSTRAINT "gifs_thumbnail_required" CHECK ("gifs"."thumbnail_key" IS NOT NULL AND length("gifs"."thumbnail_key") > 0) NOT VALID;

@@ -33,6 +33,7 @@ export type Media = {
 	uploaderId: string;
 	type: MediaType;
 	objectKey: string;
+	thumbnailKey: string | null;
 	fileName: string;
 	contentType: string;
 	fileSize: number;

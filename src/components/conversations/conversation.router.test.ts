@@ -1,3 +1,4 @@
+import { FfmpegGifConverter } from "../../lib/gif-converter.js";
 import sharp from "sharp";
 import { expect, jest, test } from "@jest/globals";
 import express from "express";
@@ -348,4 +349,45 @@ test("image metadata exposes dimensions without reading the object and enforces 
 		)
 		.auth(alice.tokens.accessToken, { type: "bearer" })
 		.expect(404);
+});
+
+test("video upload and metadata return a first-frame thumbnail URL without fetching the video", async () => {
+	const { app, alice, bob, storage } = await fixture();
+	const created = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	const base = `/api/conversations/${created.body.conversation.id}/attachments`;
+	const video = await new FfmpegGifConverter().convertToMp4(
+		Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64"),
+	);
+	const uploaded = await request(app)
+		.post(base)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.attach("file", video, { filename: "clip.mp4", contentType: "video/mp4" })
+		.expect(201);
+	const media = uploaded.body.attachment;
+	expect(media.thumbnailUrl).toBe(
+		`https://storage.example/${media.thumbnailKey}?signed=true`,
+	);
+	expect(
+		await sharp(storage.objects.get(media.thumbnailKey)!).metadata(),
+	).toMatchObject({ format: "jpeg", width: media.width, height: media.height });
+	const read = jest.spyOn(storage, "getObject");
+	const signer = jest
+		.spyOn(storage, "getThumbnailUrl")
+		.mockResolvedValue("https://storage.example/refreshed.jpg");
+	const metadata = await request(app)
+		.get(`${base}/${media.id}/metadata`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(metadata.body.attachment).toMatchObject({
+		width: media.width,
+		height: media.height,
+		thumbnailUrl: "https://storage.example/refreshed.jpg",
+	});
+	expect(metadata.headers["cache-control"]).toBe("no-store");
+	expect(read).not.toHaveBeenCalled();
+	expect(signer).toHaveBeenCalledWith(media.thumbnailKey);
 });

@@ -258,6 +258,7 @@ export function createConversationRouter(
 	router.get(
 		"/:conversationId/attachments/:mediaId/metadata",
 		handle(async (request, response) => {
+			response.setHeader("Cache-Control", "no-store");
 			response.json({
 				attachment: await service.getAttachment(
 					request.auth!.userId,
