@@ -164,6 +164,15 @@ Username and user ID lookups reuse the same private conversation. Changing a
 username does not change existing chats. Unknown usernames return `404`, and
 starting a chat with yourself returns `400`.
 
+To fetch the first (oldest) message directly, use authenticated
+`GET /api/conversations/:conversationId/messages/first`. It returns
+`{ "message": { ... } }`, including the usual message fields and reactions, or
+`{ "message": null }` if the conversation is empty. Membership is required;
+nonmembers receive `403`. The oldest message is selected by creation time, then
+UUID for tied timestamps, using the existing message history index. Reading it
+does not change the user's seen position. No migration is required. Use the
+returned ID with the context endpoint below to load messages near the beginning.
+
 To jump to a message with context, use
 `GET /api/conversations/:id/messages/:messageId/around?before=50&after=50`.
 It returns `{ message, before, after, hasMoreBefore, hasMoreAfter }`. Both counts

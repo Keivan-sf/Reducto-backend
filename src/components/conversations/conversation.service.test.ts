@@ -890,3 +890,56 @@ test("voice uploads enforce membership, size limits, valid audio, and clean up f
 	expect(storage.objects.size).toBe(0);
 	expect(repository.media.size).toBe(0);
 });
+
+test.each(["private", "group"] as const)(
+	"first-message lookup in a %s conversation uses chronological order and UUID ties",
+	async (type) => {
+		const { service, repository, notifications, owner, member, outsider } =
+			fixture();
+		const chat =
+			type === "private"
+				? await service.createPrivate(owner, member)
+				: await service.createGroup(owner, "History");
+		if (type === "group") await service.addMember(owner, chat.id, member);
+		expect(await service.getFirstMessage(owner, chat.id)).toBeNull();
+		const newest = await service.sendMessage(owner, chat.id, {
+			text: "Newest",
+		});
+		const earlyA = await service.sendMessage(member, chat.id, {
+			text: "Early A",
+		});
+		const earlyB = await service.sendMessage(member, chat.id, {
+			text: "Early B",
+		});
+		repository.messages.get(newest.id)!.createdAt = new Date(2000);
+		repository.messages.get(earlyA.id)!.createdAt = new Date(1000);
+		repository.messages.get(earlyB.id)!.createdAt = new Date(1000);
+		const oldest = earlyA.id < earlyB.id ? earlyA : earlyB;
+		await service.react(member, chat.id, oldest.id, "👍");
+		const other = await service.createPrivate(owner, outsider);
+		const unrelated = await service.sendMessage(outsider, other.id, {
+			text: "Earlier in another chat",
+		});
+		repository.messages.get(unrelated.id)!.createdAt = new Date(0);
+		const events = notifications.events.length;
+		expect(await service.getFirstMessage(member, chat.id)).toMatchObject({
+			id: oldest.id,
+			reactions: [{ messageId: oldest.id, userId: member, emoji: "👍" }],
+		});
+		expect(
+			(await service.listConversations(member)).find(
+				(item) => item.id === chat.id,
+			)?.lastSeenMessageId,
+		).toBeNull();
+		expect(notifications.events).toHaveLength(events);
+		await expect(
+			service.getFirstMessage(outsider, chat.id),
+		).rejects.toMatchObject({ status: 403 });
+		if (type === "group") {
+			await service.removeMember(owner, chat.id, member);
+			await expect(
+				service.getFirstMessage(member, chat.id),
+			).rejects.toMatchObject({ status: 403 });
+		}
+	},
+);

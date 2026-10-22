@@ -161,6 +161,15 @@ export class MemoryConversationRepository implements ConversationRepository {
 	async getMessage(id: string) {
 		return this.messages.get(id);
 	}
+	async getFirstMessage(conversationId: string) {
+		return [...this.messages.values()]
+			.filter((message) => message.conversationId === conversationId)
+			.sort(
+				(first, second) =>
+					+first.createdAt - +second.createdAt ||
+					(first.id < second.id ? -1 : first.id > second.id ? 1 : 0),
+			)[0];
+	}
 	async listMessages(conversationId: string, limit: number, before?: Message) {
 		return [...this.messages.values()]
 			.filter(

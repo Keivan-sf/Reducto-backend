@@ -559,3 +559,53 @@ test("HTTP seen API validates updates and includes caller-specific read state in
 		repository.members.get(`${id}:${alice.user.id}`)?.lastSeenMessageId,
 	).toBe(messageId);
 });
+
+test("HTTP first-message lookup handles empty history and preserves ordinary message lookup", async () => {
+	const { app, alice, bob, outsider, repository } = await fixture();
+	const created = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	const base = `/api/conversations/${created.body.conversation.id}/messages`;
+	await request(app).get(`${base}/first`).expect(401);
+	await request(app)
+		.get(`${base}/first`)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(403);
+	const empty = await request(app)
+		.get(`${base}/first`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(empty.body).toEqual({ message: null });
+	const ids: string[] = [];
+	for (const text of ["First", "Second"]) {
+		const sent = await request(app)
+			.post(base)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.send({ text })
+			.expect(201);
+		ids.push(sent.body.message.id);
+		repository.messages.get(sent.body.message.id)!.createdAt = new Date(
+			ids.length * 1000,
+		);
+	}
+	const first = await request(app)
+		.get(`${base}/first`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(first.body.message).toMatchObject({
+		id: ids[0],
+		text: "First",
+		reactions: [],
+	});
+	const ordinary = await request(app)
+		.get(`${base}/${ids[0]}`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(first.body).toEqual(ordinary.body);
+	await request(app)
+		.get("/api/conversations/not-a-uuid/messages/first")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(400);
+});

@@ -162,6 +162,17 @@ export function createConversationRouter(
 		}),
 	);
 	router.get(
+		"/:conversationId/messages/first",
+		handle(async (request, response) => {
+			response.json({
+				message: await service.getFirstMessage(
+					request.auth!.userId,
+					String(request.params.conversationId),
+				),
+			});
+		}),
+	);
+	router.get(
 		"/:conversationId/messages/:messageId",
 		handle(async (request, response) => {
 			response.json({

@@ -173,6 +173,32 @@ const messageResult = object({ message: reference("Message") });
 const conversationResult = object({ conversation: reference("Conversation") });
 
 export const chatPaths = {
+	"/api/conversations/{conversationId}/messages/first": {
+		get: operation(
+			"Get the oldest message, including reactions; null for an empty conversation",
+			200,
+			undefined,
+			conversationParams,
+			object({
+				message: {
+					...chatSchemas.Message,
+					nullable: true,
+					properties: {
+						...chatSchemas.Message.properties,
+						reactions: {
+							type: "array",
+							items: object({
+								messageId: uuid,
+								userId: uuid,
+								emoji: { type: "string", enum: [...REACTION_EMOJIS] },
+							}),
+						},
+					},
+					required: [...chatSchemas.Message.required, "reactions"],
+				},
+			}),
+		),
+	},
 	"/api/conversations/{conversationId}/messages/{messageId}/around": {
 		get: operation(
 			"Get the target message and its nearest older/newer messages",

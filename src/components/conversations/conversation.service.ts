@@ -364,6 +364,16 @@ export class ConversationService {
 		return message;
 	}
 
+	async getFirstMessage(userId: string, conversationId: string) {
+		await this.requireMember(userId, conversationId);
+		const message = await this.repository.getFirstMessage(conversationId);
+		if (!message) return null;
+		return {
+			...message,
+			reactions: await this.repository.listReactions([message.id]),
+		};
+	}
+
 	async getMessage(userId: string, conversationId: string, messageId: string) {
 		await this.requireMember(userId, conversationId);
 		const message = await this.repository.getMessage(messageId);

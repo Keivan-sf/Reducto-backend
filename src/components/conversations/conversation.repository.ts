@@ -55,6 +55,7 @@ export interface ConversationRepository {
 	deleteGroup(conversationId: string): Promise<void>;
 	createMessage(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
 	getMessage(id: string): Promise<Message | undefined>;
+	getFirstMessage(conversationId: string): Promise<Message | undefined>;
 	listMessages(
 		conversationId: string,
 		limit: number,
@@ -295,6 +296,13 @@ export class DrizzleConversationRepository implements ConversationRepository {
 	getMessage(id: string) {
 		return this.database.query.messages.findFirst({
 			where: eq(messages.id, id),
+		});
+	}
+
+	getFirstMessage(conversationId: string) {
+		return this.database.query.messages.findFirst({
+			where: eq(messages.conversationId, conversationId),
+			orderBy: [asc(messages.createdAt), asc(messages.id)],
 		});
 	}
 
