@@ -50,7 +50,7 @@ export const chatSchemas = {
 		uploaderId: uuid,
 		type: {
 			type: "string",
-			enum: ["image", "video", "audio", "music", "document"],
+			enum: ["image", "video", "audio", "music", "voice", "document"],
 		},
 		objectKey: { type: "string" },
 		thumbnailKey: { type: "string", nullable: true },
@@ -86,7 +86,7 @@ export const chatSchemas = {
 			object({
 				type: {
 					type: "string",
-					enum: ["image", "video", "audio", "music", "document"],
+					enum: ["image", "video", "audio", "music", "voice", "document"],
 				},
 				mediaId: uuid,
 			}),
@@ -299,7 +299,12 @@ export const chatPaths = {
 						schema: object(
 							{
 								file: { type: "string", format: "binary" },
-								kind: { type: "string", enum: ["music"] },
+								kind: {
+									type: "string",
+									enum: ["music", "voice"],
+									description:
+										"Use voice for speech uploads: audio is converted to mono Ogg Opus at a target bitrate of 30 kbit/s. Music and ordinary audio preserve the original file.",
+								},
 							},
 							["file"],
 						),

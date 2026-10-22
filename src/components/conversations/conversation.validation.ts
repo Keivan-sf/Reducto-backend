@@ -4,7 +4,7 @@ import { REACTION_EMOJIS } from "./conversation.types.js";
 
 const fileAttachment = z
 	.object({
-		type: z.enum(["image", "video", "audio", "music", "document"]),
+		type: z.enum(["image", "video", "audio", "music", "voice", "document"]),
 		mediaId: z.uuid().toLowerCase(),
 	})
 	.strict();

@@ -1,7 +1,8 @@
 # Reducto backend
 
 Install dependencies with `pnpm install`. Install `ffmpeg` and `ffprobe` on the API server and
-make them available on `PATH`; GIF/video uploads use its H.264 encoder and
+make them available on `PATH`; voice uploads require its `libopus` encoder,
+GIF/video uploads use its H.264 encoder, and
 video dimensions are read with ffprobe.
 
 Configure the local `.env` using `.env.example`, then run:
@@ -43,7 +44,7 @@ The response is `{ "attachment": { "id": "...", "type": "image", "width": 640,
 conversation membership. It reads only the database. The existing attachment
 GET endpoint continues to download the file. For GIF message references, use
 `GET /api/gifs/:gifId`. Width and height follow image EXIF/video rotation so
-clients can reserve the displayed aspect ratio. Audio, music, and documents
+clients can reserve the displayed aspect ratio. Audio, music, voice messages, and documents
 return `null` for both dimensions.
 
 For an existing deployment, stop API instances running the old upload code,
@@ -154,7 +155,7 @@ members immediately lose access to future requests and notifications.
 | GET          | `/api/conversations/:id/messages?limit=50&before=messageId` | History, newest first; use `nextCursor` for the next page                                         |
 | POST         | `/api/conversations/:id/messages`                           | Send text and/or one attachment                                                                   |
 | POST         | `/api/conversations/:id/forward`                            | Forward `{ "messageId": "..." }` from a chat I can access                                         |
-| POST         | `/api/conversations/:id/attachments`                        | Upload multipart `file`, optionally `kind=music`                                                  |
+| POST         | `/api/conversations/:id/attachments`                        | Upload multipart `file`, optionally `kind=music` or `kind=voice`                                                  |
 | GET          | `/api/conversations/:id/attachments/:mediaId`               | Download an attachment                                                                            |
 | PUT / DELETE | `/api/conversations/:id/messages/:messageId/reactions`      | Add/remove my `{ "emoji": "👍" }` reaction                                                        |
 
@@ -218,6 +219,45 @@ in their destination even if the source group is deleted.
 
 Allowed reactions: 👍 👎 ❤️ 😂 😮 😢 🔥 🎉. Each user can add multiple distinct
 reactions; adding the same reaction twice is idempotent.
+
+## Voice messages
+
+Voice messages are a separate attachment type from music and ordinary audio.
+Upload a multipart `file` with `kind=voice`:
+
+```sh
+curl -X POST "$API_URL/api/conversations/$CONVERSATION_ID/attachments" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F 'kind=voice' \
+  -F 'file=@recording.webm;type=audio/webm'
+```
+
+Supported inputs include Ogg, MP3, MP4/M4A audio, WebM audio, WAV, and FLAC.
+Audio MIME types, including `audio/ogg;codecs=opus`, and `application/ogg` are
+accepted; FFmpeg validates and decodes the actual audio. The first audio stream
+is converted to mono, 48 kHz Ogg Opus, using speech encoding and a target bitrate
+of 30 kbit/s with variable bitrate enabled. Output size varies with the recording.
+Non-audio streams and source metadata are discarded. The upload limit is 50 MB;
+empty, corrupt, or undecodable audio is rejected before storage.
+
+The upload response's `attachment` has `type: "voice"`, `contentType: "audio/ogg"`,
+an `.ogg` filename, and the converted file size. Width, height, and thumbnail
+fields are null. Send the uploaded ID as a normal message attachment:
+
+```json
+{ "attachment": { "type": "voice", "mediaId": "<uploaded attachment UUID>" } }
+```
+
+Voice attachments support replies, forwarding, message history, and existing
+`message.created` notifications. Use the attachment metadata and download endpoints
+with conversation membership, as with other files. Downloads contain the converted
+Ogg bytes. Music (`kind=music`) and audio uploads without a kind retain their
+original files and types; they are not converted to voice messages.
+
+Run `pnpm run db:migrate` before deploying voice support. Migration 0009 adds
+`voice` to the media type enum without changing existing attachments or files;
+there is no media backfill to run. FFmpeg with `libopus` must be installed on the
+API server.
 
 ## Groups
 

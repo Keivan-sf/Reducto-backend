@@ -1,3 +1,8 @@
+import { basename, extname } from "node:path";
+import {
+	FfmpegVoiceConverter,
+	type VoiceConverter,
+} from "../../lib/voice-converter.js";
 import {
 	FfmpegThumbnailGenerator,
 	type ThumbnailGenerator,
@@ -42,6 +47,7 @@ export class ConversationService {
 		private readonly notifications: Notifications,
 		private readonly dimensions: DimensionReader = new MediaDimensionReader(),
 		private readonly thumbnails: ThumbnailGenerator = new FfmpegThumbnailGenerator(),
+		private readonly voiceConverter: VoiceConverter = new FfmpegVoiceConverter(),
 	) {}
 
 	private publicConversation(conversation: Conversation) {
@@ -471,12 +477,14 @@ export class ConversationService {
 		userId: string,
 		conversationId: string,
 		file: { buffer: Buffer; mimetype: string; originalname: string },
-		kind?: "music",
+		kind?: "music" | "voice",
 	) {
 		await this.requireMember(userId, conversationId);
 		if (!file.buffer.length || file.buffer.length > MAX_ATTACHMENT_SIZE_BYTES)
 			throw new HttpError(400, "Attachments must be between 1 byte and 50 MB");
-		const contentType = file.mimetype;
+		let contentType = file.mimetype;
+		let body = file.buffer;
+		let fileName = file.originalname;
 		if (contentType === "image/gif")
 			throw new HttpError(
 				400,
@@ -489,7 +497,20 @@ export class ConversationService {
 				: contentType.startsWith("audio/")
 					? "audio"
 					: "document";
-		if (kind) {
+		if (kind === "voice") {
+			const mimeType = contentType.split(";", 1)[0].trim().toLowerCase();
+			if (!mimeType.startsWith("audio/") && mimeType !== "application/ogg")
+				throw new HttpError(400, "Voice messages must be audio files");
+			body = await this.voiceConverter.convertToOgg(file.buffer);
+			if (!body.length || body.length > MAX_ATTACHMENT_SIZE_BYTES)
+				throw new HttpError(
+					400,
+					"Converted voice messages must be between 1 byte and 50 MB",
+				);
+			type = "voice";
+			contentType = "audio/ogg";
+			fileName = `${basename(file.originalname, extname(file.originalname)) || "voice"}.ogg`;
+		} else if (kind === "music") {
 			if (type !== "audio")
 				throw new HttpError(400, "Music must be an audio file");
 			type = "music";
@@ -503,12 +524,12 @@ export class ConversationService {
 		const thumbnailKey = thumbnail
 			? `thumbnails/attachments/${conversationId}/${randomUUID()}.jpg`
 			: null;
-		const objectKey = `attachments/${conversationId}/${randomUUID()}`;
+		const objectKey = `attachments/${conversationId}/${randomUUID()}${type === "voice" ? ".ogg" : ""}`;
 		let media: Media;
 		try {
 			await this.storage.putObject({
 				key: objectKey,
-				body: file.buffer,
+				body,
 				contentType,
 			});
 			if (thumbnail && thumbnailKey)
@@ -523,9 +544,9 @@ export class ConversationService {
 				type,
 				objectKey,
 				thumbnailKey,
-				fileName: file.originalname,
+				fileName,
 				contentType,
-				fileSize: file.buffer.length,
+				fileSize: body.length,
 				...dimensions,
 			});
 		} catch (error) {

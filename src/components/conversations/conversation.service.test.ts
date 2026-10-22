@@ -719,3 +719,174 @@ test("video thumbnails survive forwarding, refresh URLs, and do not block downlo
 	).toEqual(Buffer.from("video"));
 	expect(storage.objects.size).toBe(2);
 });
+
+test.each([
+	"audio/ogg",
+	"audio/mpeg",
+	"audio/mp3",
+	"audio/mp4",
+	"audio/webm",
+	"audio/wav",
+	"audio/flac",
+	"audio/ogg;codecs=opus",
+	"application/ogg",
+])("voice uploads accept %s and store converted metadata", async (mimetype) => {
+	const { repository, storage, notifications, owner, member, outsider } =
+		fixture();
+	const converted = Buffer.from("converted ogg opus");
+	const convertToOgg = jest.fn(async (_input: Buffer) => converted);
+	const service = new ConversationService(
+		repository,
+		storage,
+		notifications,
+		undefined,
+		undefined,
+		{ convertToOgg },
+	);
+	const chat = await service.createPrivate(owner, member);
+	const file = {
+		buffer: Buffer.from("source audio"),
+		mimetype,
+		originalname: "recording.webm",
+	};
+	const media = await service.uploadAttachment(owner, chat.id, file, "voice");
+	expect(media).toMatchObject({
+		type: "voice",
+		contentType: "audio/ogg",
+		fileName: "recording.ogg",
+		fileSize: converted.length,
+		width: null,
+		height: null,
+		thumbnailKey: null,
+		thumbnailUrl: null,
+	});
+	expect(media.objectKey).toMatch(/\.ogg$/);
+	expect(storage.objects.get(media.objectKey)).toEqual(converted);
+	expect(convertToOgg).toHaveBeenCalledWith(file.buffer);
+	const message = await service.sendMessage(owner, chat.id, {
+		attachment: { type: "voice", mediaId: media.id },
+	});
+	expect(notifications.events.at(-1)?.payload).toMatchObject({
+		message: { attachment: { type: "voice", mediaId: media.id } },
+	});
+	const target = await service.createPrivate(owner, outsider);
+	const forwarded = await service.forwardMessage(owner, target.id, message.id);
+	if (forwarded.attachment?.type !== "voice")
+		throw new Error("Expected a voice attachment");
+	expect(
+		(
+			await service.getAttachment(
+				outsider,
+				target.id,
+				forwarded.attachment.mediaId,
+			)
+		).contentType,
+	).toBe("audio/ogg");
+	expect(
+		(
+			await service.downloadAttachment(
+				outsider,
+				target.id,
+				forwarded.attachment.mediaId,
+			)
+		).body,
+	).toEqual(converted);
+	await expect(
+		service.sendMessage(owner, chat.id, {
+			attachment: { type: "music", mediaId: media.id },
+		}),
+	).rejects.toMatchObject({ status: 400 });
+});
+
+test("music and ordinary audio preserve their original bytes and do not invoke voice conversion", async () => {
+	const { repository, storage, notifications, owner, member } = fixture();
+	const convertToOgg = jest.fn(async (_input: Buffer) =>
+		Buffer.from("converted"),
+	);
+	const service = new ConversationService(
+		repository,
+		storage,
+		notifications,
+		undefined,
+		undefined,
+		{ convertToOgg },
+	);
+	const chat = await service.createPrivate(owner, member);
+	const file = {
+		buffer: Buffer.from("original mp3"),
+		mimetype: "audio/mpeg",
+		originalname: "song.mp3",
+	};
+	for (const kind of [undefined, "music"] as const) {
+		const media = await service.uploadAttachment(owner, chat.id, file, kind);
+		expect(media).toMatchObject({
+			type: kind ?? "audio",
+			contentType: "audio/mpeg",
+			fileName: "song.mp3",
+			fileSize: file.buffer.length,
+		});
+		expect(storage.objects.get(media.objectKey)).toEqual(file.buffer);
+	}
+	expect(convertToOgg).not.toHaveBeenCalled();
+});
+
+test("voice uploads enforce membership, size limits, valid audio, and clean up failed persistence", async () => {
+	const { repository, storage, notifications, owner, member, outsider } =
+		fixture();
+	const convertToOgg = jest.fn(async (_input: Buffer) => Buffer.from("ogg"));
+	const service = new ConversationService(
+		repository,
+		storage,
+		notifications,
+		undefined,
+		undefined,
+		{ convertToOgg },
+	);
+	const chat = await service.createPrivate(owner, member);
+	const file = {
+		buffer: Buffer.from("audio"),
+		mimetype: "audio/wav",
+		originalname: "recording.wav",
+	};
+	await expect(
+		service.uploadAttachment(outsider, chat.id, file, "voice"),
+	).rejects.toMatchObject({ status: 403 });
+	await expect(
+		service.uploadAttachment(
+			owner,
+			chat.id,
+			{ ...file, buffer: Buffer.alloc(0) },
+			"voice",
+		),
+	).rejects.toMatchObject({ status: 400 });
+	await expect(
+		service.uploadAttachment(
+			owner,
+			chat.id,
+			{ ...file, buffer: Buffer.alloc(50 * 1024 * 1024 + 1) },
+			"voice",
+		),
+	).rejects.toMatchObject({ status: 400 });
+	await expect(
+		service.uploadAttachment(
+			owner,
+			chat.id,
+			{ ...file, mimetype: "image/png" },
+			"voice",
+		),
+	).rejects.toMatchObject({ status: 400 });
+	expect(convertToOgg).not.toHaveBeenCalled();
+	convertToOgg.mockRejectedValueOnce(new Error("Invalid audio"));
+	await expect(
+		service.uploadAttachment(owner, chat.id, file, "voice"),
+	).rejects.toThrow("Invalid audio");
+	expect(storage.objects.size).toBe(0);
+	jest
+		.spyOn(repository, "createMedia")
+		.mockRejectedValueOnce(new Error("Database unavailable"));
+	await expect(
+		service.uploadAttachment(owner, chat.id, file, "voice"),
+	).rejects.toThrow("Database unavailable");
+	expect(storage.objects.size).toBe(0);
+	expect(repository.media.size).toBe(0);
+});

@@ -24,7 +24,8 @@ export type Member = {
 	role: MemberRole;
 	joinedAt: Date;
 };
-export type MediaType = "image" | "video" | "audio" | "music" | "document";
+export type MediaType =
+	"image" | "video" | "audio" | "music" | "voice" | "document";
 export type Attachment =
 	{ type: "gif"; gifId: string } | { type: MediaType; mediaId: string };
 export type Media = {

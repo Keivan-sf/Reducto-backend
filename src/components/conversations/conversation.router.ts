@@ -243,7 +243,7 @@ export function createConversationRouter(
 				return;
 			}
 			const input = parseInput(
-				z.object({ kind: z.literal("music").optional() }).strict(),
+				z.object({ kind: z.enum(["music", "voice"]).optional() }).strict(),
 				request.body,
 			);
 			const attachment = await service.uploadAttachment(

@@ -1,3 +1,4 @@
+import { voiceTestWav } from "../../lib/voice-converter.test-support.js";
 import { FfmpegGifConverter } from "../../lib/gif-converter.js";
 import sharp from "sharp";
 import { expect, jest, test } from "@jest/globals";
@@ -390,4 +391,90 @@ test("video upload and metadata return a first-frame thumbnail URL without fetch
 	expect(metadata.headers["cache-control"]).toBe("no-store");
 	expect(read).not.toHaveBeenCalled();
 	expect(signer).toHaveBeenCalledWith(media.thumbnailKey);
+});
+
+test("HTTP voice messages upload, send, expose metadata, and download converted Ogg", async () => {
+	const { app, alice, bob, outsider, storage } = await fixture();
+	const created = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	const base = `/api/conversations/${created.body.conversation.id}`;
+	const source = voiceTestWav();
+	await request(app)
+		.post(`${base}/attachments`)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.field("kind", "voice")
+		.attach("file", source, {
+			filename: "recording.wav",
+			contentType: "audio/wav",
+		})
+		.expect(403);
+	const uploaded = await request(app)
+		.post(`${base}/attachments`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.field("kind", "voice")
+		.attach("file", source, {
+			filename: "recording.wav",
+			contentType: "audio/wav",
+		})
+		.expect(201);
+	const media = uploaded.body.attachment;
+	expect(media).toMatchObject({
+		type: "voice",
+		contentType: "audio/ogg",
+		fileName: "recording.ogg",
+		width: null,
+		height: null,
+		thumbnailUrl: null,
+	});
+	const stored = storage.objects.get(media.objectKey)!;
+	expect(stored.toString("ascii", 0, 4)).toBe("OggS");
+	expect(media.fileSize).toBe(stored.length);
+	expect(stored.length).toBeLessThan(source.length);
+	const sent = await request(app)
+		.post(`${base}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ attachment: { type: "voice", mediaId: media.id } })
+		.expect(201);
+	expect(sent.body.message.attachment).toEqual({
+		type: "voice",
+		mediaId: media.id,
+	});
+	const history = await request(app)
+		.get(`${base}/messages`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(history.body.messages[0].attachment.type).toBe("voice");
+	const metadata = await request(app)
+		.get(`${base}/attachments/${media.id}/metadata`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(metadata.body.attachment).toEqual(media);
+	const downloaded = await request(app)
+		.get(`${base}/attachments/${media.id}`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(downloaded.body).toEqual(stored);
+	expect(downloaded.headers["content-disposition"]).toContain("recording.ogg");
+	await request(app)
+		.post(`${base}/attachments`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.field("kind", "voice")
+		.attach("file", Buffer.from("invalid"), {
+			filename: "bad.mp3",
+			contentType: "audio/mpeg",
+		})
+		.expect(400);
+	await request(app)
+		.post(`${base}/attachments`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.field("kind", "unknown")
+		.attach("file", source, {
+			filename: "recording.wav",
+			contentType: "audio/wav",
+		})
+		.expect(400);
+	expect(storage.objects.size).toBe(1);
 });

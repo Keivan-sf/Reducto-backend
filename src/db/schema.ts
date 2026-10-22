@@ -92,6 +92,7 @@ export const mediaType = pgEnum("media_type", [
 	"video",
 	"audio",
 	"music",
+	"voice",
 	"document",
 ]);
 export const reactionEmoji = pgEnum("reaction_emoji", [
