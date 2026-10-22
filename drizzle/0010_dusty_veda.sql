@@ -1,0 +1,2 @@
+ALTER TABLE "conversation_members" ADD COLUMN "last_seen_message_id" uuid;--> statement-breakpoint
+ALTER TABLE "conversation_members" ADD CONSTRAINT "members_last_seen_same_conversation_fk" FOREIGN KEY ("conversation_id","last_seen_message_id") REFERENCES "public"."messages"("conversation_id","id") ON DELETE no action ON UPDATE no action;

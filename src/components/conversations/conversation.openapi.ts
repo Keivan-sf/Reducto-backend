@@ -113,6 +113,31 @@ export const chatSchemas = {
 		name: { type: "string", nullable: true },
 		createdAt: { type: "string", format: "date-time" },
 	}),
+	ReadState: object({
+		lastSeenMessageId: { ...uuid, nullable: true },
+		unreadCount: {
+			type: "integer",
+			minimum: 0,
+			description:
+				"Messages newer than the seen position, including your own; all messages if never seen",
+		},
+	}),
+	ConversationListItem: object({
+		id: uuid,
+		type: { type: "string", enum: ["private", "group"] },
+		name: { type: "string", nullable: true },
+		createdAt: { type: "string", format: "date-time" },
+		lastSeenMessageId: { ...uuid, nullable: true },
+		unreadCount: { type: "integer", minimum: 0 },
+	}),
+	Member: object({
+		conversationId: uuid,
+		userId: uuid,
+		role: { type: "string", enum: ["owner", "admin", "member"] },
+		joinedAt: { type: "string", format: "date-time" },
+		lastSeenMessageId: { ...uuid, nullable: true },
+	}),
+
 	Message: object({
 		id: uuid,
 		conversationId: uuid,
@@ -199,7 +224,10 @@ export const chatPaths = {
 			undefined,
 			[],
 			object({
-				conversations: { type: "array", items: reference("Conversation") },
+				conversations: {
+					type: "array",
+					items: reference("ConversationListItem"),
+				},
 			}),
 		),
 	},
@@ -239,8 +267,24 @@ export const chatPaths = {
 			conversationResult,
 		),
 	},
+	"/api/conversations/{conversationId}/seen": {
+		put: operation(
+			"Advance my seen position; repeated or older messages are ignored",
+			200,
+			object({ messageId: uuid }),
+			conversationParams,
+			reference("ReadState"),
+		),
+	},
+
 	"/api/conversations/{conversationId}/members": {
-		get: operation("List members", 200, undefined, conversationParams),
+		get: operation(
+			"List members and their last-seen message IDs",
+			200,
+			undefined,
+			conversationParams,
+			object({ members: { type: "array", items: reference("Member") } }),
+		),
 	},
 	"/api/conversations/{conversationId}/messages": {
 		get: operation("Read message history, newest first", 200, undefined, [

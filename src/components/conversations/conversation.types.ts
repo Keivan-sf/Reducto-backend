@@ -23,6 +23,7 @@ export type Member = {
 	userId: string;
 	role: MemberRole;
 	joinedAt: Date;
+	lastSeenMessageId: string | null;
 };
 export type MediaType =
 	"image" | "video" | "audio" | "music" | "voice" | "document";
@@ -71,3 +72,9 @@ export type MessagePage = {
 	messages: (Message & { reactions: Reaction[] })[];
 	nextCursor: string | null;
 };
+
+export type ReadState = {
+	lastSeenMessageId: string | null;
+	unreadCount: number;
+};
+export type ConversationListItem = Conversation & ReadState;

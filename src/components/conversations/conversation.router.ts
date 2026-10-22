@@ -13,6 +13,7 @@ import {
 	type ConversationService,
 } from "./conversation.service.js";
 import {
+	seenSchema,
 	forwardSchema,
 	messageSchema,
 	pageSchema,
@@ -110,6 +111,20 @@ export function createConversationRouter(
 			});
 		}),
 	);
+	router.put(
+		"/:conversationId/seen",
+		handle(async (request, response) => {
+			const input = parseInput(seenSchema, request.body);
+			response.json(
+				await service.markSeen(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					input,
+				),
+			);
+		}),
+	);
+
 	router.get(
 		"/:conversationId",
 		handle(async (request, response) => {

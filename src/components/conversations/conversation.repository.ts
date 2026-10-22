@@ -11,6 +11,8 @@ import {
 } from "../../db/schema.js";
 import type {
 	Conversation,
+	ConversationListItem,
+	ReadState,
 	Media,
 	Member,
 	MemberRole,
@@ -31,7 +33,12 @@ export interface ConversationRepository {
 	): Promise<Conversation>;
 	getConversation(id: string): Promise<Conversation | undefined>;
 	findByInvite(token: string): Promise<Conversation | undefined>;
-	listConversations(userId: string): Promise<Conversation[]>;
+	listConversations(userId: string): Promise<ConversationListItem[]>;
+	markSeen(
+		conversationId: string,
+		userId: string,
+		messageId: string,
+	): Promise<(ReadState & { changed: boolean }) | undefined>;
 	getMember(
 		conversationId: string,
 		userId: string,
@@ -74,6 +81,16 @@ export interface ConversationRepository {
 }
 
 type Database = ReturnType<typeof createDatabase>;
+
+// Use PostgreSQL timestamps directly to retain microsecond precision. The tuple
+// ordering matches message history and its (conversation_id, created_at, id) index.
+// Keep outer references explicitly qualified: single-table Drizzle selections
+// otherwise strip column qualifiers, which would change subquery correlation.
+const unreadCount = sql<number>`(SELECT count(*) FROM messages AS unread
+ WHERE unread.conversation_id = conversation_members.conversation_id
+ AND (conversation_members.last_seen_message_id IS NULL OR
+ (unread.created_at, unread.id) > (SELECT created_at, id FROM messages
+ WHERE id = conversation_members.last_seen_message_id)))`.mapWith(Number);
 
 export class DrizzleConversationRepository implements ConversationRepository {
 	constructor(private readonly database: Database) {}
@@ -154,7 +171,11 @@ export class DrizzleConversationRepository implements ConversationRepository {
 
 	async listConversations(userId: string) {
 		const rows = await this.database
-			.select({ conversation: conversations })
+			.select({
+				conversation: conversations,
+				lastSeenMessageId: conversationMembers.lastSeenMessageId,
+				unreadCount,
+			})
 			.from(conversationMembers)
 			.innerJoin(
 				conversations,
@@ -162,7 +183,47 @@ export class DrizzleConversationRepository implements ConversationRepository {
 			)
 			.where(eq(conversationMembers.userId, userId))
 			.orderBy(desc(conversations.createdAt));
-		return rows.map((row) => row.conversation);
+		return rows.map((row) => ({
+			...row.conversation,
+			lastSeenMessageId: row.lastSeenMessageId,
+			unreadCount: row.unreadCount,
+		}));
+	}
+
+	async markSeen(conversationId: string, userId: string, messageId: string) {
+		return this.database.transaction(async (transaction) => {
+			const memberWhere = and(
+				eq(conversationMembers.conversationId, conversationId),
+				eq(conversationMembers.userId, userId),
+			);
+			// Serialize updates from multiple devices for this member.
+			const [member] = await transaction
+				.select({ userId: conversationMembers.userId })
+				.from(conversationMembers)
+				.where(memberWhere)
+				.for("update");
+			if (!member) return undefined;
+			const updated = await transaction
+				.update(conversationMembers)
+				.set({ lastSeenMessageId: messageId })
+				.where(
+					and(
+						memberWhere,
+						sql`(${conversationMembers.lastSeenMessageId} IS NULL OR
+    (SELECT (created_at, id) FROM messages WHERE id = ${messageId}) >
+    (SELECT (created_at, id) FROM messages WHERE id = ${conversationMembers.lastSeenMessageId}))`,
+					),
+				)
+				.returning({ id: conversationMembers.lastSeenMessageId });
+			const [state] = await transaction
+				.select({
+					lastSeenMessageId: conversationMembers.lastSeenMessageId,
+					unreadCount,
+				})
+				.from(conversationMembers)
+				.where(memberWhere);
+			return { ...state, changed: updated.length > 0 };
+		});
 	}
 
 	getMember(conversationId: string, userId: string) {

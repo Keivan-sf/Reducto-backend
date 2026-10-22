@@ -220,6 +220,64 @@ in their destination even if the source group is deleted.
 Allowed reactions: 👍 👎 ❤️ 😂 😮 😢 🔥 🎉. Each user can add multiple distinct
 reactions; adding the same reaction twice is idempotent.
 
+## Seen positions and unread counts
+
+Each conversation membership stores `lastSeenMessageId`. It is `null` until the
+user explicitly marks a message as seen. Existing memberships also start with
+null; the migration does not infer read history. Reading message history, fetching
+metadata, sending a message, or requesting the conversation list does not mark
+messages as seen.
+
+`GET /api/conversations` includes these fields on every conversation for the
+requesting user:
+
+```json
+{
+  "id": "<conversation UUID>",
+  "type": "private",
+  "name": null,
+  "createdAt": "2026-10-22T00:00:00.000Z",
+  "lastSeenMessageId": null,
+  "unreadCount": 12
+}
+```
+
+Unread counts include every message strictly newer than that user's seen position,
+including their own messages. With no seen position, all messages count as unread;
+an empty chat has zero unread messages. Ordering matches message history:
+`createdAt`, then message UUID for tied timestamps. PostgreSQL timestamp precision
+is retained when comparing positions.
+
+Advance the authenticated user's seen position with:
+
+```http
+PUT /api/conversations/:conversationId/seen
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "messageId": "<last message displayed to the user>" }
+```
+
+The response is `{ "lastSeenMessageId": "...", "unreadCount": 0 }`, with the
+actual unread count at the time of the update. The target must exist in this
+conversation (`400` otherwise); membership is required (`403` for nonmembers).
+The caller's user ID comes from their access token. Repeated or older positions
+are ignored and return the current state. Updates from multiple devices are
+serialized per member so the saved position cannot move backward.
+
+After a successful advance, other current members receive the Socket.IO event
+`conversation.seen` with `{ "userId": "...", "conversationId": "...",
+"lastSeenMessageId": "..." }`. The actor, outsiders, and removed members do not
+receive it. Unchanged or rejected updates emit no event. Fetch
+`GET /api/conversations/:conversationId/members` to recover all current members'
+seen positions after reconnecting; member entries now include `lastSeenMessageId`.
+Removing a membership removes its seen state; rejoining starts with no seen
+position. Deleting a conversation removes its messages and seen state together.
+
+Run `pnpm run db:migrate` before deploying. Migration 0010 adds the nullable
+membership field and a foreign key requiring the seen message to belong to the
+same conversation. It preserves existing data and requires no backfill.
+
 ## Voice messages
 
 Voice messages are a separate attachment type from music and ordinary audio.

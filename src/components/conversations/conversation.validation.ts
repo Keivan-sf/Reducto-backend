@@ -72,3 +72,7 @@ export function parseInput<Output>(
 		);
 	return parsed.data;
 }
+
+export const seenSchema = z
+	.object({ messageId: z.uuid().toLowerCase() })
+	.strict();

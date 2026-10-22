@@ -72,10 +72,47 @@ export class MemoryConversationRepository implements ConversationRepository {
 		);
 	}
 	async listConversations(userId: string) {
-		return [...this.conversations.values()].filter((conversation) =>
-			this.members.has(`${conversation.id}:${userId}`),
+		return [...this.conversations.values()]
+			.filter((conversation) =>
+				this.members.has(`${conversation.id}:${userId}`),
+			)
+			.map((conversation) => ({
+				...conversation,
+				...this.readState(conversation.id, userId),
+			}));
+	}
+	private readState(conversationId: string, userId: string) {
+		const lastSeenMessageId = this.members.get(
+			`${conversationId}:${userId}`,
+		)!.lastSeenMessageId;
+		const lastSeen = lastSeenMessageId
+			? this.messages.get(lastSeenMessageId)
+			: undefined;
+		const unreadCount = [...this.messages.values()].filter(
+			(message) =>
+				message.conversationId === conversationId &&
+				(!lastSeen || this.newer(message, lastSeen)),
+		).length;
+		return { lastSeenMessageId, unreadCount };
+	}
+	private newer(message: Message, previous: Message) {
+		return (
+			+message.createdAt > +previous.createdAt ||
+			(+message.createdAt === +previous.createdAt && message.id > previous.id)
 		);
 	}
+	async markSeen(conversationId: string, userId: string, messageId: string) {
+		const member = this.members.get(`${conversationId}:${userId}`);
+		if (!member) return undefined;
+		const previous = member.lastSeenMessageId
+			? this.messages.get(member.lastSeenMessageId)
+			: undefined;
+		const changed =
+			!previous || this.newer(this.messages.get(messageId)!, previous);
+		if (changed) member.lastSeenMessageId = messageId;
+		return { ...this.readState(conversationId, userId), changed };
+	}
+
 	async getMember(conversationId: string, userId: string) {
 		return this.members.get(`${conversationId}:${userId}`);
 	}
@@ -92,6 +129,7 @@ export class MemoryConversationRepository implements ConversationRepository {
 				userId,
 				role: "member",
 				joinedAt: new Date(),
+				lastSeenMessageId: null,
 			});
 	}
 	async setRole(conversationId: string, userId: string, role: MemberRole) {

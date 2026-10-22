@@ -127,6 +127,7 @@ export const conversationMembers = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		role: memberRole("role").notNull().default("member"),
+		lastSeenMessageId: uuid("last_seen_message_id"),
 		joinedAt: timestamp("joined_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -134,6 +135,11 @@ export const conversationMembers = pgTable(
 	(table) => [
 		primaryKey({ columns: [table.conversationId, table.userId] }),
 		index("members_user_idx").on(table.userId),
+		foreignKey({
+			name: "members_last_seen_same_conversation_fk",
+			columns: [table.conversationId, table.lastSeenMessageId],
+			foreignColumns: [messages.conversationId, messages.id],
+		}),
 	],
 );
 

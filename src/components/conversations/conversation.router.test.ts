@@ -50,7 +50,7 @@ async function fixture() {
 	app.use("/api/conversations", createConversationRouter(auth, service));
 	app.use("/api/groups", createGroupRouter(auth, service));
 	app.use(errorHandler);
-	return { app, alice, bob, outsider, storage };
+	return { app, alice, bob, outsider, storage, repository };
 }
 
 test("HTTP messaging enforces authentication, membership, validated bodies, and attachment ownership", async () => {
@@ -477,4 +477,85 @@ test("HTTP voice messages upload, send, expose metadata, and download converted 
 		})
 		.expect(400);
 	expect(storage.objects.size).toBe(1);
+});
+
+test("HTTP seen API validates updates and includes caller-specific read state in conversation lists", async () => {
+	const { app, alice, bob, outsider, repository } = await fixture();
+	const created = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	const id = created.body.conversation.id;
+	const path = `/api/conversations/${id}/seen`;
+	const sent = await request(app)
+		.post(`/api/conversations/${id}/messages`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Hi Alice" })
+		.expect(201);
+	const messageId = sent.body.message.id;
+	const before = await request(app)
+		.get("/api/conversations")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(before.body.conversations[0]).toMatchObject({
+		id,
+		lastSeenMessageId: null,
+		unreadCount: 1,
+	});
+	await request(app).put(path).send({ messageId }).expect(401);
+	await request(app)
+		.put(path)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.send({ messageId })
+		.expect(403);
+	for (const body of [
+		{},
+		{ messageId: "bad" },
+		{ messageId: null },
+		{ messageId, userId: bob.user.id },
+	])
+		await request(app)
+			.put(path)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.send(body)
+			.expect(400);
+	const updated = await request(app)
+		.put(path)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ messageId: messageId.toUpperCase() })
+		.expect(200);
+	expect(updated.body).toEqual({
+		lastSeenMessageId: messageId,
+		unreadCount: 0,
+	});
+	const after = await request(app)
+		.get("/api/conversations")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(after.body.conversations[0]).toMatchObject({
+		lastSeenMessageId: messageId,
+		unreadCount: 0,
+	});
+	const bobList = await request(app)
+		.get("/api/conversations")
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(bobList.body.conversations[0]).toMatchObject({
+		lastSeenMessageId: null,
+		unreadCount: 1,
+	});
+	const other = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: outsider.user.id })
+		.expect(200);
+	await request(app)
+		.put(`/api/conversations/${other.body.conversation.id}/seen`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ messageId })
+		.expect(400);
+	expect(
+		repository.members.get(`${id}:${alice.user.id}`)?.lastSeenMessageId,
+	).toBe(messageId);
 });

@@ -26,6 +26,7 @@ import type {
 	ReactionEmoji,
 } from "./conversation.types.js";
 import {
+	seenSchema,
 	groupSchema,
 	messageSchema,
 	parseInput,
@@ -92,8 +93,43 @@ export class ConversationService {
 
 	async listConversations(userId: string) {
 		return (await this.repository.listConversations(userId)).map(
-			(conversation) => this.publicConversation(conversation),
+			(conversation) => ({
+				...this.publicConversation(conversation),
+				lastSeenMessageId: conversation.lastSeenMessageId,
+				unreadCount: conversation.unreadCount,
+			}),
 		);
+	}
+
+	async markSeen(
+		userId: string,
+		conversationId: string,
+		input: { messageId: string },
+	) {
+		const { messageId } = parseInput(seenSchema, input);
+		await this.requireMember(userId, conversationId);
+		const message = await this.repository.getMessage(messageId);
+		if (!message || message.conversationId !== conversationId)
+			throw new HttpError(400, "Seen message must belong to this conversation");
+		const result = await this.repository.markSeen(
+			conversationId,
+			userId,
+			messageId,
+		);
+		if (!result)
+			throw new HttpError(403, "Conversation membership is required");
+		const { changed, ...state } = result;
+		if (changed) {
+			const members = await this.repository.listMembers(conversationId);
+			this.notifications.publish(
+				members
+					.filter((member) => member.userId !== userId)
+					.map((member) => member.userId),
+				"conversation.seen",
+				{ userId, conversationId, lastSeenMessageId: state.lastSeenMessageId },
+			);
+		}
+		return state;
 	}
 
 	async getConversation(userId: string, conversationId: string) {
