@@ -151,6 +151,11 @@ export const chatSchemas = {
 		conversationId: uuid,
 		senderId: uuid,
 		text: { type: "string", nullable: true },
+		isEdited: {
+			type: "boolean",
+			default: false,
+			description: "True after the message text has been edited.",
+		},
 		replyToMessageId: { ...uuid, nullable: true },
 		attachment: { ...reference("MessageAttachment"), nullable: true },
 		attachmentMetadata: {

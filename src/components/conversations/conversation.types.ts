@@ -70,6 +70,7 @@ export type Message = {
 	conversationId: string;
 	senderId: string;
 	text: string | null;
+	isEdited: boolean;
 	replyToMessageId: string | null;
 	attachment: Attachment | null;
 	forwardedFrom: ForwardOrigin | null;

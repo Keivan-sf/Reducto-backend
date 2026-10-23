@@ -54,7 +54,9 @@ export interface ConversationRepository {
 	removeMember(conversationId: string, userId: string): Promise<void>;
 	renameGroup(conversationId: string, name: string): Promise<void>;
 	deleteGroup(conversationId: string): Promise<void>;
-	createMessage(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
+	createMessage(
+		message: Omit<Message, "id" | "createdAt" | "isEdited">,
+	): Promise<Message>;
 	getMessage(id: string): Promise<Message | undefined>;
 	updateMessageText(
 		conversationId: string,
@@ -296,7 +298,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 			.where(eq(conversations.id, conversationId));
 	}
 
-	async createMessage(message: Omit<Message, "id" | "createdAt">) {
+	async createMessage(message: Omit<Message, "id" | "createdAt" | "isEdited">) {
 		const [createdMessage] = await this.database
 			.insert(messages)
 			.values(message)
@@ -318,7 +320,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 	) {
 		const [message] = await this.database
 			.update(messages)
-			.set({ text })
+			.set({ text, isEdited: true })
 			.where(
 				and(
 					eq(messages.id, messageId),

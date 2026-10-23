@@ -375,7 +375,9 @@ with `{ "text": "Updated text" }`. Only the sender, while still a member of the
 conversation, can edit it. Text is trimmed and must contain 1–10,000 characters.
 Other fields are rejected. The response is `{ "message": ... }`, including
 attachment metadata. Every current member, including the sender, receives
-`message.updated` with `{ conversationId, messageId, text }` containing the saved text.
+`message.updated` with `{ conversationId, messageId, text, isEdited }` containing
+the saved text. Every message includes `isEdited`, which defaults to `false` and
+becomes `true` when its text is edited. The flag stays true after later edits.
 
 Connections disconnect at token expiry; refresh the token over HTTP and reconnect.
 Events are delivered to currently connected participants and are not queued for
@@ -384,7 +386,7 @@ offline users; retrieve persisted history through HTTP after reconnecting.
 | Event                                       | Payload                                                 |
 | ------------------------------------------- | ------------------------------------------------------- |
 | `message.created`                           | `{ message }`                                           |
-| `message.updated`                           | `{ conversationId, messageId, text }`                     |
+| `message.updated`                           | `{ conversationId, messageId, text, isEdited }`           |
 | `message.reaction_changed`                  | `{ conversationId, messageId, userId, emoji, removed }` |
 | `conversation.updated`                      | `{ conversationId, name }`                              |
 | `conversation.deleted`                      | `{ conversationId }`                                    |

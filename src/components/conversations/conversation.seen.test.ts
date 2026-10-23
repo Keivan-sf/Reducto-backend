@@ -36,6 +36,7 @@ async function fixture(type: "private" | "group" = "private") {
 			conversationId,
 			senderId,
 			text: "Hello",
+			isEdited: false,
 			attachment: null,
 			replyToMessageId: null,
 			forwardedFrom: null,

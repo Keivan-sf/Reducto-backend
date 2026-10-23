@@ -61,6 +61,7 @@ test("HTTP PATCH edits only an authenticated sender's message text", async () =>
 		.send({ text: "Original" })
 		.expect(201);
 	const original = sent.body.message;
+	expect(original.isEdited).toBe(false);
 	const path = `/api/conversations/${original.conversationId}/messages/${original.id}`;
 	await request(app).patch(path).send({ text: "changed" }).expect(401);
 	for (const account of [bob, outsider]) {
@@ -93,12 +94,17 @@ test("HTTP PATCH edits only an authenticated sender's message text", async () =>
 		.auth(alice.tokens.accessToken, { type: "bearer" })
 		.send({ text: "  Updated text  " })
 		.expect(200);
-	expect(edited.body.message).toEqual({ ...original, text: "Updated text" });
+	expect(edited.body.message).toEqual({
+		...original,
+		text: "Updated text",
+		isEdited: true,
+	});
 	const fetched = await request(app)
 		.get(path)
 		.auth(bob.tokens.accessToken, { type: "bearer" })
 		.expect(200);
 	expect(fetched.body.message.text).toBe("Updated text");
+	expect(fetched.body.message.isEdited).toBe(true);
 });
 
 test("HTTP messaging enforces authentication, membership, validated bodies, and attachment ownership", async () => {

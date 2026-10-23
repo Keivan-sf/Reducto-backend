@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+	boolean,
 	check,
 	integer,
 	doublePrecision,
@@ -194,6 +195,7 @@ export const messages = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "restrict" }),
 		text: text("text"),
+		isEdited: boolean("is_edited").notNull().default(false),
 		replyToMessageId: uuid("reply_to_message_id"),
 		attachment:
 			jsonb("attachment").$type<

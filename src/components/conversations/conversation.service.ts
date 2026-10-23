@@ -390,12 +390,15 @@ export class ConversationService {
 			conversationId,
 			messageId: message.id,
 			text: message.text,
+			isEdited: message.isEdited,
 		});
 		const [enriched] = await this.withAttachmentMetadata([message]);
 		return enriched;
 	}
 
-	private async saveMessage(input: Omit<Message, "id" | "createdAt">) {
+	private async saveMessage(
+		input: Omit<Message, "id" | "createdAt" | "isEdited">,
+	) {
 		const message = await this.repository.createMessage(input);
 		const [enriched] = await this.withAttachmentMetadata([message]);
 		await this.publish(message.conversationId, "message.created", {

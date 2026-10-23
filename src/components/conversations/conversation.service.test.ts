@@ -64,6 +64,7 @@ test("editing changes only text and notifies every current member with the new t
 	expect(await repository.getMessage(sent.id)).toEqual({
 		...original,
 		text: "New caption",
+		isEdited: true,
 	});
 	expect(edited).toMatchObject({
 		text: "New caption",
@@ -77,6 +78,7 @@ test("editing changes only text and notifies every current member with the new t
 				conversationId: chat.id,
 				messageId: sent.id,
 				text: "New caption",
+				isEdited: true,
 			},
 		},
 	]);
@@ -138,6 +140,7 @@ test.each([
 	{ text: "changed", forwardedFrom: null },
 	{ text: "changed", conversationId: randomUUID() },
 	{ text: "changed", createdAt: new Date() },
+	{ text: "changed", isEdited: false },
 ])("edits reject invalid text and non-text fields (%j)", async (input) => {
 	const { service, repository, notifications, owner, member } = fixture();
 	const sent = await service.sendPrivate(owner, member, { text: "Original" });
@@ -152,6 +155,42 @@ test.each([
 	).rejects.toMatchObject({ status: 400 });
 	expect((await repository.getMessage(sent.id))?.text).toBe("Original");
 	expect(notifications.events).toEqual([]);
+});
+
+test("the edited flag persists across message reads and new forwards start unedited", async () => {
+	const { service, repository, notifications, owner, member } = fixture();
+	const sent = await service.sendPrivate(owner, member, { text: "Original" });
+	expect(sent.isEdited).toBe(false);
+	expect(notifications.events.at(-1)?.payload).toMatchObject({
+		message: { isEdited: false },
+	});
+	await service.editMessage(owner, sent.conversationId, sent.id, {
+		text: "Edited",
+	});
+	await service.editMessage(owner, sent.conversationId, sent.id, {
+		text: "Original",
+	});
+	expect((await repository.getMessage(sent.id))?.isEdited).toBe(true);
+	expect(
+		(await service.getMessage(member, sent.conversationId, sent.id)).isEdited,
+	).toBe(true);
+	expect(
+		(await service.getFirstMessage(member, sent.conversationId))?.isEdited,
+	).toBe(true);
+	expect(
+		(await service.listMessages(member, sent.conversationId, 10)).messages[0]
+			.isEdited,
+	).toBe(true);
+	expect(
+		(await service.getMessagesAround(member, sent.conversationId, sent.id))
+			.message.isEdited,
+	).toBe(true);
+	const forwarded = await service.forwardMessage(
+		owner,
+		sent.conversationId,
+		sent.id,
+	);
+	expect(forwarded.isEdited).toBe(false);
 });
 
 test("attachment metadata accompanies messages across reads, forwards, and notifications", async () => {
@@ -702,6 +741,7 @@ test("message context returns the nearest 50 on each side in chronological order
 			senderId: owner,
 			text: String(count),
 			replyToMessageId: null,
+			isEdited: false,
 			attachment: null,
 			forwardedFrom: null,
 			createdAt: new Date(0),

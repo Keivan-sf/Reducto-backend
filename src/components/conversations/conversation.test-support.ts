@@ -158,8 +158,13 @@ export class MemoryConversationRepository implements ConversationRepository {
 		for (const [key, media] of this.media)
 			if (media.conversationId === conversationId) this.media.delete(key);
 	}
-	async createMessage(input: Omit<Message, "id" | "createdAt">) {
-		const message = { ...input, id: randomUUID(), createdAt: new Date() };
+	async createMessage(input: Omit<Message, "id" | "createdAt" | "isEdited">) {
+		const message = {
+			...input,
+			id: randomUUID(),
+			createdAt: new Date(),
+			isEdited: false,
+		};
 		this.messages.set(message.id, message);
 		return message;
 	}
@@ -179,7 +184,7 @@ export class MemoryConversationRepository implements ConversationRepository {
 			message.senderId !== senderId
 		)
 			return undefined;
-		const updated = { ...message, text };
+		const updated = { ...message, text, isEdited: true };
 		this.messages.set(messageId, updated);
 		return updated;
 	}
