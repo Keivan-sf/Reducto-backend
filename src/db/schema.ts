@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
 	check,
 	integer,
+	doublePrecision,
 	index,
 	foreignKey,
 	jsonb,
@@ -161,6 +162,7 @@ export const conversationMedia = pgTable(
 		fileSize: integer("file_size").notNull(),
 		width: integer("width"),
 		height: integer("height"),
+		durationSeconds: doublePrecision("duration_seconds"),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -173,6 +175,10 @@ export const conversationMedia = pgTable(
 		check(
 			"conversation_media_thumbnail_required",
 			sql`(${table.type} = 'video' AND ${table.thumbnailKey} IS NOT NULL AND length(${table.thumbnailKey}) > 0) OR (${table.type} <> 'video' AND ${table.thumbnailKey} IS NULL)`,
+		),
+		check(
+			"conversation_media_duration_required",
+			sql`(${table.type} IN ('video', 'voice', 'music') AND ${table.durationSeconds} IS NOT NULL AND ${table.durationSeconds} > 0) OR (${table.type} NOT IN ('video', 'voice', 'music') AND ${table.durationSeconds} IS NULL)`,
 		),
 	],
 );

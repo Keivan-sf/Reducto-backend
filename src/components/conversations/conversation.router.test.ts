@@ -82,6 +82,7 @@ test("HTTP messaging enforces authentication, membership, validated bodies, and 
 		.expect(201);
 	const attachment = uploaded.body.attachment;
 	expect(attachment.type).toBe("document");
+	expect(attachment.durationSeconds).toBeNull();
 	const sentAttachment = await request(app)
 		.post(`${path}/messages`)
 		.auth(alice.tokens.accessToken, { type: "bearer" })
@@ -374,6 +375,7 @@ test("video upload and metadata return a first-frame thumbnail URL without fetch
 	expect(media.thumbnailUrl).toBe(
 		`https://storage.example/${media.thumbnailKey}?signed=true`,
 	);
+	expect(media.durationSeconds).toBeGreaterThan(0);
 	expect(
 		await sharp(storage.objects.get(media.thumbnailKey)!).metadata(),
 	).toMatchObject({ format: "jpeg", width: media.width, height: media.height });
@@ -431,6 +433,7 @@ test("HTTP voice messages upload, send, expose metadata, and download converted 
 		height: null,
 		thumbnailUrl: null,
 	});
+	expect(media.durationSeconds).toBeCloseTo(1, 1);
 	const stored = storage.objects.get(media.objectKey)!;
 	expect(stored.toString("ascii", 0, 4)).toBe("OggS");
 	expect(media.fileSize).toBe(stored.length);
@@ -444,11 +447,18 @@ test("HTTP voice messages upload, send, expose metadata, and download converted 
 		type: "voice",
 		mediaId: media.id,
 	});
+	expect(sent.body.message.attachmentMetadata.durationSeconds).toBeCloseTo(
+		1,
+		1,
+	);
 	const history = await request(app)
 		.get(`${base}/messages`)
 		.auth(bob.tokens.accessToken, { type: "bearer" })
 		.expect(200);
 	expect(history.body.messages[0].attachment.type).toBe("voice");
+	expect(
+		history.body.messages[0].attachmentMetadata.durationSeconds,
+	).toBeCloseTo(1, 1);
 	const metadata = await request(app)
 		.get(`${base}/attachments/${media.id}/metadata`)
 		.auth(bob.tokens.accessToken, { type: "bearer" })

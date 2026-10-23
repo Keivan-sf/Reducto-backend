@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { voiceTestWav } from "../../lib/voice-converter.test-support.js";
 import { expect, jest, test } from "@jest/globals";
 import { randomUUID } from "node:crypto";
 import { ConversationService } from "./conversation.service.js";
@@ -7,6 +8,12 @@ import {
 	MemoryConversationRepository,
 	MemoryNotifications,
 } from "./conversation.test-support.js";
+
+const fakeDuration = {
+	async read() {
+		return 1.25;
+	},
+};
 
 function fixture() {
 	const repository = new MemoryConversationRepository();
@@ -52,6 +59,7 @@ test("attachment metadata accompanies messages across reads, forwards, and notif
 		fileSize: 123,
 		width: 64,
 		height: 48,
+		durationSeconds: 1.25,
 	});
 	const sent = await service.sendMessage(owner, chat.id, {
 		attachment: { type: "video", mediaId: media.id },
@@ -365,6 +373,8 @@ test("all attachment types are stored with their type and only members can uploa
 				return Buffer.from("jpeg");
 			},
 		},
+		undefined,
+		fakeDuration,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const inputs = [
@@ -386,6 +396,9 @@ test("all attachment types are stored with their type and only members can uploa
 			input.kind,
 		);
 		expect(media.type).toBe(input.type);
+		expect(media.durationSeconds).toBe(
+			input.type === "video" || input.type === "music" ? 1.25 : null,
+		);
 		expect(media.thumbnailUrl).toEqual(
 			input.type === "video" ? expect.any(String) : null,
 		);
@@ -721,6 +734,8 @@ test.each(["generation", "storage", "database"])(
 				},
 			},
 			{ generate },
+			undefined,
+			fakeDuration,
 		);
 		const chat = await service.createPrivate(owner, member);
 		if (stage === "generation")
@@ -764,6 +779,8 @@ test("video thumbnails survive forwarding, refresh URLs, and do not block downlo
 				return Buffer.from("jpeg");
 			},
 		},
+		undefined,
+		fakeDuration,
 	);
 	const source = await service.createPrivate(owner, member);
 	const target = await service.createPrivate(owner, outsider);
@@ -842,6 +859,7 @@ test.each([
 		undefined,
 		undefined,
 		{ convertToOgg },
+		fakeDuration,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const file = {
@@ -910,6 +928,7 @@ test("music and ordinary audio preserve their original bytes and do not invoke v
 		undefined,
 		undefined,
 		{ convertToOgg },
+		fakeDuration,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const file = {
@@ -930,6 +949,39 @@ test("music and ordinary audio preserve their original bytes and do not invoke v
 	expect(convertToOgg).not.toHaveBeenCalled();
 });
 
+test("music duration is stored and included in message and forwarded metadata", async () => {
+	const { service, owner, member, outsider } = fixture();
+	const source = await service.createPrivate(owner, member);
+	const target = await service.createPrivate(member, outsider);
+	const media = await service.uploadAttachment(
+		owner,
+		source.id,
+		{
+			buffer: voiceTestWav(2),
+			mimetype: "audio/wav",
+			originalname: "song.wav",
+		},
+		"music",
+	);
+	expect(media.durationSeconds).toBeCloseTo(2, 1);
+	const message = await service.sendMessage(owner, source.id, {
+		attachment: { type: "music", mediaId: media.id },
+	});
+	expect(message.attachmentMetadata).toMatchObject({
+		durationSeconds: media.durationSeconds,
+	});
+	const forwarded = await service.forwardMessage(member, target.id, message.id);
+	expect(forwarded.attachmentMetadata).toMatchObject({
+		durationSeconds: media.durationSeconds,
+	});
+	expect(
+		(await service.listMessages(outsider, target.id, 10)).messages[0]
+			.attachmentMetadata,
+	).toMatchObject({
+		durationSeconds: media.durationSeconds,
+	});
+});
+
 test("voice uploads enforce membership, size limits, valid audio, and clean up failed persistence", async () => {
 	const { repository, storage, notifications, owner, member, outsider } =
 		fixture();
@@ -941,6 +993,7 @@ test("voice uploads enforce membership, size limits, valid audio, and clean up f
 		undefined,
 		undefined,
 		{ convertToOgg },
+		fakeDuration,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const file = {

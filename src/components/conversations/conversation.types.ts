@@ -41,6 +41,7 @@ export type Media = {
 	fileSize: number;
 	width: number | null;
 	height: number | null;
+	durationSeconds: number | null;
 	createdAt: Date;
 };
 export type GifMetadata = {

@@ -64,6 +64,14 @@ export const chatSchemas = {
 		fileName: { type: "string" },
 		contentType: { type: "string" },
 		fileSize: { type: "integer" },
+		durationSeconds: {
+			type: "number",
+			format: "double",
+			minimum: 0,
+			nullable: true,
+			description:
+				"Positive duration in seconds for voice messages, music, and videos; null for other media.",
+		},
 		width: {
 			type: "integer",
 			minimum: 1,

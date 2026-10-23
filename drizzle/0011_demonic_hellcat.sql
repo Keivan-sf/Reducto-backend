@@ -1,0 +1,2 @@
+ALTER TABLE "conversation_media" ADD COLUMN "duration_seconds" double precision DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "conversation_media" ADD CONSTRAINT "conversation_media_duration_required" CHECK (("conversation_media"."type" IN ('video', 'voice', 'music') AND "conversation_media"."duration_seconds" > 0) OR ("conversation_media"."type" NOT IN ('video', 'voice', 'music') AND "conversation_media"."duration_seconds" = 0)) NOT VALID;

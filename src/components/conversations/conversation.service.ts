@@ -11,6 +11,10 @@ import {
 	MediaDimensionReader,
 	type DimensionReader,
 } from "../../lib/media-dimensions.js";
+import {
+	FfprobeDurationReader,
+	type DurationReader,
+} from "../../lib/media-duration.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { HttpError } from "../../lib/http.js";
 import type { ObjectStorage } from "../../lib/object-storage.js";
@@ -51,6 +55,7 @@ export class ConversationService {
 		private readonly dimensions: DimensionReader = new MediaDimensionReader(),
 		private readonly thumbnails: ThumbnailGenerator = new FfmpegThumbnailGenerator(),
 		private readonly voiceConverter: VoiceConverter = new FfmpegVoiceConverter(),
+		private readonly durationReader: DurationReader = new FfprobeDurationReader(),
 	) {}
 
 	private publicConversation(conversation: Conversation) {
@@ -624,6 +629,10 @@ export class ConversationService {
 			type === "image" || type === "video"
 				? await this.dimensions.read(file.buffer, type)
 				: { width: null, height: null };
+		const durationSeconds =
+			type === "voice" || type === "music" || type === "video"
+				? await this.durationReader.read(body)
+				: null;
 		const thumbnail =
 			type === "video" ? await this.thumbnails.generate(file.buffer) : null;
 		const thumbnailKey = thumbnail
@@ -652,6 +661,7 @@ export class ConversationService {
 				fileName,
 				contentType,
 				fileSize: body.length,
+				durationSeconds,
 				...dimensions,
 			});
 		} catch (error) {

@@ -66,6 +66,25 @@ reported by record ID, preserved, and cause a nonzero exit status. Restore those
 objects and rerun the command; completed records are skipped. The command requires
 the same database/S3 environment variables as the server and ffprobe on PATH.
 
+## Media durations
+
+Voice, music, and video attachment metadata includes a positive `durationSeconds`,
+measured from the bytes stored in object storage. Images, documents, and ordinary
+audio have `null` duration. The database check requires a positive duration for
+timed attachments and `NULL` for all other types. Migration 0012 converts
+existing untimed values to `NULL`. After applying the migrations, run:
+
+```sh
+pnpm run db:backfill-media-durations
+```
+
+The backfill reads existing timed attachments with a missing duration from object
+storage, probes their durations, and validates the database check when all files
+succeed. Failed records keep their `0` or `NULL` placeholder and are reported by
+ID; fix the missing or corrupt files and rerun the command. It skips completed
+rows. The command uses the server's database/S3 configuration and requires
+`ffprobe` on PATH.
+
 ## Video thumbnails
 
 Every video attachment and GIF (stored as MP4) has a JPEG thumbnail of its first
