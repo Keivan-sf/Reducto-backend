@@ -166,6 +166,23 @@ export class MemoryConversationRepository implements ConversationRepository {
 	async getMessage(id: string) {
 		return this.messages.get(id);
 	}
+	async updateMessageText(
+		conversationId: string,
+		messageId: string,
+		senderId: string,
+		text: string,
+	) {
+		const message = this.messages.get(messageId);
+		if (
+			!message ||
+			message.conversationId !== conversationId ||
+			message.senderId !== senderId
+		)
+			return undefined;
+		const updated = { ...message, text };
+		this.messages.set(messageId, updated);
+		return updated;
+	}
 	async getFirstMessage(conversationId: string) {
 		return [...this.messages.values()]
 			.filter((message) => message.conversationId === conversationId)

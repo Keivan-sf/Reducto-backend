@@ -53,6 +53,54 @@ async function fixture() {
 	return { app, alice, bob, outsider, storage, repository };
 }
 
+test("HTTP PATCH edits only an authenticated sender's message text", async () => {
+	const { app, alice, bob, outsider } = await fixture();
+	const sent = await request(app)
+		.post(`/api/conversations/private/${bob.user.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Original" })
+		.expect(201);
+	const original = sent.body.message;
+	const path = `/api/conversations/${original.conversationId}/messages/${original.id}`;
+	await request(app).patch(path).send({ text: "changed" }).expect(401);
+	for (const account of [bob, outsider]) {
+		await request(app)
+			.patch(path)
+			.auth(account.tokens.accessToken, { type: "bearer" })
+			.send({ text: "changed" })
+			.expect(403);
+	}
+	for (const input of [
+		{},
+		{ text: " " },
+		{ text: null },
+		{ text: "changed", attachment: null },
+		{ text: "changed", senderId: bob.user.id },
+	]) {
+		await request(app)
+			.patch(path)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.send(input)
+			.expect(400);
+	}
+	await request(app)
+		.patch(`/api/conversations/${original.conversationId}/messages/invalid`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "changed" })
+		.expect(400);
+	const edited = await request(app)
+		.patch(path)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "  Updated text  " })
+		.expect(200);
+	expect(edited.body.message).toEqual({ ...original, text: "Updated text" });
+	const fetched = await request(app)
+		.get(path)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(fetched.body.message.text).toBe("Updated text");
+});
+
 test("HTTP messaging enforces authentication, membership, validated bodies, and attachment ownership", async () => {
 	const { app, alice, bob, outsider } = await fixture();
 	await request(app).get("/api/conversations").expect(401);

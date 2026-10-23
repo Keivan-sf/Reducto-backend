@@ -34,6 +34,7 @@ import {
 	seenSchema,
 	groupSchema,
 	messageSchema,
+	editMessageSchema,
 	parseInput,
 	reactionSchema,
 	usernameSchema,
@@ -363,6 +364,35 @@ export class ConversationService {
 			attachment: parsed.attachment ?? null,
 			forwardedFrom: null,
 		});
+	}
+
+	async editMessage(
+		userId: string,
+		conversationId: string,
+		messageId: string,
+		input: { text: string },
+	) {
+		const { text } = parseInput(editMessageSchema, input);
+		await this.requireMember(userId, conversationId);
+		const original = await this.repository.getMessage(messageId);
+		if (!original || original.conversationId !== conversationId)
+			throw new HttpError(404, "Message not found");
+		if (original.senderId !== userId)
+			throw new HttpError(403, "Only the sender can edit a message");
+		const message = await this.repository.updateMessageText(
+			conversationId,
+			messageId,
+			userId,
+			text,
+		);
+		if (!message) throw new HttpError(404, "Message not found");
+		await this.publish(conversationId, "message.updated", {
+			conversationId,
+			messageId: message.id,
+			text: message.text,
+		});
+		const [enriched] = await this.withAttachmentMetadata([message]);
+		return enriched;
 	}
 
 	private async saveMessage(input: Omit<Message, "id" | "createdAt">) {

@@ -370,6 +370,13 @@ socket.on("message.created", ({ message }) => renderMessage(message));
 
 The server assigns authenticated users to their own notification rooms. Clients
 cannot choose rooms or send messages over the socket; sending uses the HTTP API.
+To edit a message, send `PATCH /api/conversations/:conversationId/messages/:messageId`
+with `{ "text": "Updated text" }`. Only the sender, while still a member of the
+conversation, can edit it. Text is trimmed and must contain 1–10,000 characters.
+Other fields are rejected. The response is `{ "message": ... }`, including
+attachment metadata. Every current member, including the sender, receives
+`message.updated` with `{ conversationId, messageId, text }` containing the saved text.
+
 Connections disconnect at token expiry; refresh the token over HTTP and reconnect.
 Events are delivered to currently connected participants and are not queued for
 offline users; retrieve persisted history through HTTP after reconnecting.
@@ -377,6 +384,7 @@ offline users; retrieve persisted history through HTTP after reconnecting.
 | Event                                       | Payload                                                 |
 | ------------------------------------------- | ------------------------------------------------------- |
 | `message.created`                           | `{ message }`                                           |
+| `message.updated`                           | `{ conversationId, messageId, text }`                     |
 | `message.reaction_changed`                  | `{ conversationId, messageId, userId, emoji, removed }` |
 | `conversation.updated`                      | `{ conversationId, name }`                              |
 | `conversation.deleted`                      | `{ conversationId }`                                    |

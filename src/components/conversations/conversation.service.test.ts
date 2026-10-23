@@ -37,6 +37,123 @@ function fixture() {
 	};
 }
 
+test("editing changes only text and notifies every current member with the new text", async () => {
+	const { service, repository, notifications, owner, admin, member, outsider } =
+		fixture();
+	const chat = await service.createGroup(owner, "Edit group");
+	await service.addMember(owner, chat.id, admin);
+	await service.addMember(owner, chat.id, member);
+	const replyTarget = await service.sendMessage(admin, chat.id, {
+		text: "Reply here",
+	});
+	const media = await service.uploadAttachment(owner, chat.id, {
+		buffer: Buffer.from("notes"),
+		mimetype: "text/plain",
+		originalname: "notes.txt",
+	});
+	const sent = await service.sendMessage(owner, chat.id, {
+		attachment: { type: "document", mediaId: media.id },
+		replyToMessageId: replyTarget.id,
+	});
+	await service.react(admin, chat.id, sent.id, "👍");
+	const original = await repository.getMessage(sent.id);
+	notifications.events.length = 0;
+	const edited = await service.editMessage(owner, chat.id, sent.id, {
+		text: "  New caption  ",
+	});
+	expect(await repository.getMessage(sent.id)).toEqual({
+		...original,
+		text: "New caption",
+	});
+	expect(edited).toMatchObject({
+		text: "New caption",
+		attachmentMetadata: { id: media.id },
+	});
+	expect(notifications.events).toEqual([
+		{
+			event: "message.updated",
+			userIds: expect.arrayContaining([owner, admin, member]),
+			payload: {
+				conversationId: chat.id,
+				messageId: sent.id,
+				text: "New caption",
+			},
+		},
+	]);
+	expect(notifications.events[0].userIds).toHaveLength(3);
+	expect(notifications.events[0].userIds).not.toContain(outsider);
+	expect((await service.getMessage(admin, chat.id, sent.id)).reactions).toEqual(
+		[{ messageId: sent.id, userId: admin, emoji: "👍" }],
+	);
+	await service.removeMember(owner, chat.id, member);
+	await service.editMessage(owner, chat.id, sent.id, {
+		text: "Latest caption",
+	});
+	expect(notifications.events.at(-1)?.userIds).toEqual(
+		expect.arrayContaining([owner, admin]),
+	);
+	expect(notifications.events.at(-1)?.userIds).not.toContain(member);
+});
+
+test("editing requires ownership, current membership, and the correct conversation", async () => {
+	const { service, repository, notifications, owner, admin, member, outsider } =
+		fixture();
+	const chat = await service.createGroup(owner, "Group");
+	await service.addMember(owner, chat.id, admin);
+	await service.addMember(owner, chat.id, member);
+	await service.setRole(owner, chat.id, admin, "admin");
+	const sent = await service.sendMessage(member, chat.id, { text: "Original" });
+	const other = await service.createPrivate(member, outsider);
+	notifications.events.length = 0;
+	for (const userId of [owner, admin, outsider]) {
+		await expect(
+			service.editMessage(userId, chat.id, sent.id, { text: "Forged" }),
+		).rejects.toMatchObject({ status: 403 });
+	}
+	await expect(
+		service.editMessage(member, other.id, sent.id, { text: "Wrong chat" }),
+	).rejects.toMatchObject({ status: 404 });
+	await expect(
+		service.editMessage(member, chat.id, randomUUID(), { text: "Missing" }),
+	).rejects.toMatchObject({ status: 404 });
+	expect(notifications.events).toEqual([]);
+	await service.removeMember(owner, chat.id, member);
+	notifications.events.length = 0;
+	await expect(
+		service.editMessage(member, chat.id, sent.id, { text: "Removed" }),
+	).rejects.toMatchObject({ status: 403 });
+	expect((await repository.getMessage(sent.id))?.text).toBe("Original");
+	expect(notifications.events).toEqual([]);
+});
+
+test.each([
+	{},
+	{ text: "" },
+	{ text: "   " },
+	{ text: null },
+	{ text: "x".repeat(10001) },
+	{ text: "changed", attachment: null },
+	{ text: "changed", senderId: randomUUID() },
+	{ text: "changed", replyToMessageId: randomUUID() },
+	{ text: "changed", forwardedFrom: null },
+	{ text: "changed", conversationId: randomUUID() },
+	{ text: "changed", createdAt: new Date() },
+])("edits reject invalid text and non-text fields (%j)", async (input) => {
+	const { service, repository, notifications, owner, member } = fixture();
+	const sent = await service.sendPrivate(owner, member, { text: "Original" });
+	notifications.events.length = 0;
+	await expect(
+		service.editMessage(
+			owner,
+			sent.conversationId,
+			sent.id,
+			input as { text: string },
+		),
+	).rejects.toMatchObject({ status: 400 });
+	expect((await repository.getMessage(sent.id))?.text).toBe("Original");
+	expect(notifications.events).toEqual([]);
+});
+
 test("attachment metadata accompanies messages across reads, forwards, and notifications", async () => {
 	const {
 		service,

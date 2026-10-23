@@ -16,6 +16,7 @@ import {
 	seenSchema,
 	forwardSchema,
 	messageSchema,
+	editMessageSchema,
 	pageSchema,
 	parseInput,
 	reactionSchema,
@@ -180,6 +181,20 @@ export function createConversationRouter(
 					request.auth!.userId,
 					String(request.params.conversationId),
 					String(request.params.messageId),
+				),
+			});
+		}),
+	);
+	router.patch(
+		"/:conversationId/messages/:messageId",
+		handle(async (request, response) => {
+			const input = parseInput(editMessageSchema, request.body);
+			response.json({
+				message: await service.editMessage(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					String(request.params.messageId),
+					input,
 				),
 			});
 		}),

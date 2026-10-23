@@ -56,6 +56,12 @@ export interface ConversationRepository {
 	deleteGroup(conversationId: string): Promise<void>;
 	createMessage(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
 	getMessage(id: string): Promise<Message | undefined>;
+	updateMessageText(
+		conversationId: string,
+		messageId: string,
+		senderId: string,
+		text: string,
+	): Promise<Message | undefined>;
 	getFirstMessage(conversationId: string): Promise<Message | undefined>;
 	listMessages(
 		conversationId: string,
@@ -302,6 +308,26 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		return this.database.query.messages.findFirst({
 			where: eq(messages.id, id),
 		});
+	}
+
+	async updateMessageText(
+		conversationId: string,
+		messageId: string,
+		senderId: string,
+		text: string,
+	) {
+		const [message] = await this.database
+			.update(messages)
+			.set({ text })
+			.where(
+				and(
+					eq(messages.id, messageId),
+					eq(messages.conversationId, conversationId),
+					eq(messages.senderId, senderId),
+				),
+			)
+			.returning();
+		return message;
 	}
 
 	getFirstMessage(conversationId: string) {

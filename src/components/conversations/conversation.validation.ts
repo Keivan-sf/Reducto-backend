@@ -11,6 +11,9 @@ const fileAttachment = z
 const gifAttachment = z
 	.object({ type: z.literal("gif"), gifId: z.uuid().toLowerCase() })
 	.strict();
+export const editMessageSchema = z
+	.object({ text: z.string().trim().min(1).max(10000) })
+	.strict();
 export const messageSchema = z
 	.object({
 		text: z.string().trim().min(1).max(10000).optional(),

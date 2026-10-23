@@ -249,6 +249,13 @@ export const chatPaths = {
 		),
 	},
 	"/api/conversations/{conversationId}/messages/{messageId}": {
+		patch: operation(
+			"Edit only the text of your own message; notifies all current conversation members via message.updated",
+			200,
+			object({ text: { type: "string", minLength: 1, maxLength: 10000 } }),
+			messageParams,
+			messageResult,
+		),
 		get: operation(
 			"Get a message, including a reply target outside the current history page",
 			200,
