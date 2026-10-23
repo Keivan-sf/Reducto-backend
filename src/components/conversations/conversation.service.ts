@@ -21,6 +21,7 @@ import type {
 	Media,
 	MediaType,
 	Message,
+	MessageWithMetadata,
 	MessagePage,
 	NewMessage,
 	ReactionEmoji,
@@ -39,6 +40,7 @@ export const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
 export interface ChatObjectStorage extends ObjectStorage {
 	getObject(key: string): Promise<Buffer>;
 	getThumbnailUrl(key: string): Promise<string>;
+	getPlaybackUrl(key: string): Promise<string>;
 }
 
 export class ConversationService {
@@ -360,16 +362,68 @@ export class ConversationService {
 
 	private async saveMessage(input: Omit<Message, "id" | "createdAt">) {
 		const message = await this.repository.createMessage(input);
-		await this.publish(message.conversationId, "message.created", { message });
-		return message;
+		const [enriched] = await this.withAttachmentMetadata([message]);
+		await this.publish(message.conversationId, "message.created", {
+			message: enriched,
+		});
+		return enriched;
+	}
+
+	private async withAttachmentMetadata(
+		messages: Message[],
+	): Promise<MessageWithMetadata[]> {
+		const mediaIds = [
+			...new Set(
+				messages.flatMap((message) =>
+					message.attachment && message.attachment.type !== "gif"
+						? [message.attachment.mediaId]
+						: [],
+				),
+			),
+		];
+		const gifIds = [
+			...new Set(
+				messages.flatMap((message) =>
+					message.attachment?.type === "gif" ? [message.attachment.gifId] : [],
+				),
+			),
+		];
+		const [media, gifs] = await Promise.all([
+			this.repository.listMedia(mediaIds),
+			this.repository.listGifs(gifIds),
+		]);
+		const [mediaDetails, gifDetails] = await Promise.all([
+			Promise.all(media.map((item) => this.withThumbnailUrl(item))),
+			Promise.all(
+				gifs.map(async (gif) => ({
+					...gif,
+					playbackUrl: await this.storage.getPlaybackUrl(gif.objectKey),
+					thumbnailUrl: gif.thumbnailKey
+						? await this.storage.getThumbnailUrl(gif.thumbnailKey)
+						: null,
+				})),
+			),
+		]);
+		const byMediaId = new Map(mediaDetails.map((item) => [item.id, item]));
+		const byGifId = new Map(gifDetails.map((item) => [item.id, item]));
+		return messages.map((message) => ({
+			...message,
+			attachmentMetadata:
+				message.attachment?.type === "gif"
+					? (byGifId.get(message.attachment.gifId) ?? null)
+					: message.attachment
+						? (byMediaId.get(message.attachment.mediaId) ?? null)
+						: null,
+		}));
 	}
 
 	async getFirstMessage(userId: string, conversationId: string) {
 		await this.requireMember(userId, conversationId);
 		const message = await this.repository.getFirstMessage(conversationId);
 		if (!message) return null;
+		const [enriched] = await this.withAttachmentMetadata([message]);
 		return {
-			...message,
+			...enriched,
 			reactions: await this.repository.listReactions([message.id]),
 		};
 	}
@@ -379,8 +433,9 @@ export class ConversationService {
 		const message = await this.repository.getMessage(messageId);
 		if (!message || message.conversationId !== conversationId)
 			throw new HttpError(404, "Message not found");
+		const [enriched] = await this.withAttachmentMetadata([message]);
 		return {
-			...message,
+			...enriched,
 			reactions: await this.repository.listReactions([message.id]),
 		};
 	}
@@ -404,11 +459,12 @@ export class ConversationService {
 			before,
 		);
 		const page = records.slice(0, limit);
-		const reactions = await this.repository.listReactions(
-			page.map((message) => message.id),
-		);
+		const [reactions, enriched] = await Promise.all([
+			this.repository.listReactions(page.map((message) => message.id)),
+			this.withAttachmentMetadata(page),
+		]);
 		return {
-			messages: page.map((message) => ({
+			messages: enriched.map((message) => ({
 				...message,
 				reactions: reactions.filter(
 					(reaction) => reaction.messageId === message.id,
@@ -443,19 +499,22 @@ export class ConversationService {
 		]);
 		const before = older.slice(0, counts.before).reverse();
 		const after = newer.slice(0, counts.after);
-		const reactions = await this.repository.listReactions(
-			[...before, target, ...after].map((message) => message.id),
-		);
-		const withReactions = (message: Message) => ({
+		const [reactions, enriched] = await Promise.all([
+			this.repository.listReactions(
+				[...before, target, ...after].map((message) => message.id),
+			),
+			this.withAttachmentMetadata([...before, target, ...after]),
+		]);
+		const withReactions = (message: MessageWithMetadata) => ({
 			...message,
 			reactions: reactions.filter(
 				(reaction) => reaction.messageId === message.id,
 			),
 		});
 		return {
-			message: withReactions(target),
-			before: before.map(withReactions),
-			after: after.map(withReactions),
+			message: withReactions(enriched[before.length]),
+			before: enriched.slice(0, before.length).map(withReactions),
+			after: enriched.slice(before.length + 1).map(withReactions),
 			hasMoreBefore: older.length > counts.before,
 			hasMoreAfter: newer.length > counts.after,
 		};

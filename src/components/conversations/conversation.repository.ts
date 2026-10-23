@@ -14,6 +14,7 @@ import type {
 	ConversationListItem,
 	ReadState,
 	Media,
+	GifMetadata,
 	Member,
 	MemberRole,
 	Message,
@@ -68,6 +69,10 @@ export interface ConversationRepository {
 	): Promise<Message[]>;
 	createMedia(media: Omit<Media, "id" | "createdAt">): Promise<Media>;
 	getMedia(id: string): Promise<Media | undefined>;
+	listMedia(ids: string[]): Promise<Media[]>;
+	listGifs(
+		ids: string[],
+	): Promise<Omit<GifMetadata, "playbackUrl" | "thumbnailUrl">[]>;
 	addReaction(
 		messageId: string,
 		userId: string,
@@ -355,6 +360,18 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		return this.database.query.conversationMedia.findFirst({
 			where: eq(conversationMedia.id, id),
 		});
+	}
+
+	listMedia(ids: string[]) {
+		if (!ids.length) return Promise.resolve([]);
+		return this.database.query.conversationMedia.findMany({
+			where: inArray(conversationMedia.id, ids),
+		});
+	}
+
+	listGifs(ids: string[]) {
+		if (!ids.length) return Promise.resolve([]);
+		return this.database.query.gifs.findMany({ where: inArray(gifs.id, ids) });
 	}
 
 	async addReaction(messageId: string, userId: string, emoji: ReactionEmoji) {

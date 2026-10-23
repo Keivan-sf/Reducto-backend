@@ -43,6 +43,22 @@ export type Media = {
 	height: number | null;
 	createdAt: Date;
 };
+export type GifMetadata = {
+	id: string;
+	userId: string;
+	objectKey: string;
+	thumbnailKey: string | null;
+	fileSize: number;
+	width: number | null;
+	height: number | null;
+	createdAt: Date;
+	playbackUrl: string;
+	thumbnailUrl: string | null;
+};
+export type MessageWithMetadata = Message & {
+	attachmentMetadata:
+		(Media & { thumbnailUrl: string | null }) | GifMetadata | null;
+};
 export type ForwardOrigin = {
 	messageId: string;
 	conversationId: string;
@@ -69,7 +85,7 @@ export type NewMessage = {
 	replyToMessageId?: string;
 };
 export type MessagePage = {
-	messages: (Message & { reactions: Reaction[] })[];
+	messages: (MessageWithMetadata & { reactions: Reaction[] })[];
 	nextCursor: string | null;
 };
 

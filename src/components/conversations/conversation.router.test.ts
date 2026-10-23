@@ -82,11 +82,12 @@ test("HTTP messaging enforces authentication, membership, validated bodies, and 
 		.expect(201);
 	const attachment = uploaded.body.attachment;
 	expect(attachment.type).toBe("document");
-	await request(app)
+	const sentAttachment = await request(app)
 		.post(`${path}/messages`)
 		.auth(alice.tokens.accessToken, { type: "bearer" })
 		.send({ attachment: { type: "document", mediaId: attachment.id } })
 		.expect(201);
+	expect(sentAttachment.body.message.attachmentMetadata).toEqual(attachment);
 	await request(app)
 		.get(`${path}/attachments/${attachment.id}`)
 		.auth(bob.tokens.accessToken, { type: "bearer" })
@@ -96,6 +97,7 @@ test("HTTP messaging enforces authentication, membership, validated bodies, and 
 		.auth(bob.tokens.accessToken, { type: "bearer" })
 		.expect(200);
 	expect(history.body.messages).toHaveLength(1);
+	expect(history.body.messages[0].attachmentMetadata).toEqual(attachment);
 	expect(history.body.nextCursor).toBeTruthy();
 	await request(app)
 		.get(`${path}/messages?limit=10000`)

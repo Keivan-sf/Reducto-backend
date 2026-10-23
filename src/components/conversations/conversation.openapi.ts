@@ -145,6 +145,12 @@ export const chatSchemas = {
 		text: { type: "string", nullable: true },
 		replyToMessageId: { ...uuid, nullable: true },
 		attachment: { ...reference("MessageAttachment"), nullable: true },
+		attachmentMetadata: {
+			oneOf: [reference("Media"), reference("Gif")],
+			nullable: true,
+			description:
+				"Full media or GIF metadata for the attachment, including fresh signed preview URLs. Null when there is no attachment or its record is unavailable.",
+		},
 		forwardedFrom: {
 			...object({ messageId: uuid, conversationId: uuid, senderId: uuid }),
 			nullable: true,

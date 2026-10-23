@@ -5,6 +5,7 @@ import type { ChatObjectStorage } from "./conversation.service.js";
 import type {
 	Conversation,
 	Media,
+	GifMetadata,
 	Member,
 	MemberRole,
 	Message,
@@ -16,6 +17,10 @@ export class MemoryConversationRepository implements ConversationRepository {
 	readonly users = new Set<string>();
 	readonly usernames = new Map<string, string>();
 	readonly gifs = new Set<string>();
+	readonly gifRecords = new Map<
+		string,
+		Omit<GifMetadata, "playbackUrl" | "thumbnailUrl">
+	>();
 	readonly conversations = new Map<string, Conversation>();
 	readonly members = new Map<string, Member>();
 	readonly messages = new Map<string, Message>();
@@ -214,6 +219,18 @@ export class MemoryConversationRepository implements ConversationRepository {
 	async getMedia(id: string) {
 		return this.media.get(id);
 	}
+	async listMedia(ids: string[]) {
+		return ids.flatMap((id) => {
+			const media = this.media.get(id);
+			return media ? [media] : [];
+		});
+	}
+	async listGifs(ids: string[]) {
+		return ids.flatMap((id) => {
+			const gif = this.gifRecords.get(id);
+			return gif ? [gif] : [];
+		});
+	}
 	async addReaction(messageId: string, userId: string, emoji: ReactionEmoji) {
 		this.reactions.set(`${messageId}:${userId}:${emoji}`, {
 			messageId,
@@ -241,6 +258,9 @@ export class MemoryChatStorage implements ChatObjectStorage {
 		this.objects.set(input.key, input.body);
 	}
 	async getThumbnailUrl(key: string) {
+		return `https://storage.example/${key}?signed=true`;
+	}
+	async getPlaybackUrl(key: string) {
 		return `https://storage.example/${key}?signed=true`;
 	}
 	async getObject(key: string) {

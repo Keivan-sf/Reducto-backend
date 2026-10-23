@@ -30,6 +30,106 @@ function fixture() {
 	};
 }
 
+test("attachment metadata accompanies messages across reads, forwards, and notifications", async () => {
+	const {
+		service,
+		repository,
+		storage,
+		notifications,
+		owner,
+		member,
+		outsider,
+	} = fixture();
+	const chat = await service.createPrivate(owner, member);
+	const media = await repository.createMedia({
+		conversationId: chat.id,
+		uploaderId: owner,
+		type: "video",
+		objectKey: "attachments/clip.mp4",
+		thumbnailKey: "thumbnails/clip.jpg",
+		fileName: "clip.mp4",
+		contentType: "video/mp4",
+		fileSize: 123,
+		width: 64,
+		height: 48,
+	});
+	const sent = await service.sendMessage(owner, chat.id, {
+		attachment: { type: "video", mediaId: media.id },
+	});
+	const metadata = {
+		...media,
+		thumbnailUrl: await storage.getThumbnailUrl(media.thumbnailKey!),
+	};
+	expect(sent.attachmentMetadata).toEqual(metadata);
+	expect(notifications.events.at(-1)?.payload).toMatchObject({
+		message: { attachmentMetadata: metadata },
+	});
+	expect(
+		(await service.listMessages(member, chat.id, 10)).messages[0]
+			.attachmentMetadata,
+	).toEqual(metadata);
+	expect(
+		(await service.getMessage(member, chat.id, sent.id)).attachmentMetadata,
+	).toEqual(metadata);
+	expect(
+		(await service.getFirstMessage(member, chat.id))?.attachmentMetadata,
+	).toEqual(metadata);
+	expect(
+		(await service.getMessagesAround(member, chat.id, sent.id)).message
+			.attachmentMetadata,
+	).toEqual(metadata);
+	const destination = await service.createPrivate(member, outsider);
+	const forwarded = await service.forwardMessage(
+		member,
+		destination.id,
+		sent.id,
+	);
+	if (forwarded.attachment?.type !== "video")
+		throw new Error("Expected a forwarded video");
+	expect(forwarded.attachmentMetadata).toMatchObject({
+		id: forwarded.attachment.mediaId,
+		fileName: media.fileName,
+		width: media.width,
+		thumbnailUrl: metadata.thumbnailUrl,
+	});
+	expect(
+		(await service.listMessages(outsider, destination.id, 10)).messages[0]
+			.attachmentMetadata,
+	).toEqual(forwarded.attachmentMetadata);
+	const plain = await service.sendMessage(owner, chat.id, { text: "plain" });
+	expect(plain.attachmentMetadata).toBeNull();
+});
+
+test("GIF message metadata includes playable and thumbnail URLs", async () => {
+	const { service, repository, storage, owner, member } = fixture();
+	const chat = await service.createPrivate(owner, member);
+	const gifId = randomUUID();
+	const gif = {
+		id: gifId,
+		userId: owner,
+		objectKey: "gifs/clip.mp4",
+		thumbnailKey: "thumbnails/gifs/clip.jpg",
+		fileSize: 90,
+		width: 32,
+		height: 24,
+		createdAt: new Date(),
+	};
+	repository.gifs.add(gifId);
+	repository.gifRecords.set(gifId, gif);
+	const sent = await service.sendMessage(owner, chat.id, {
+		attachment: { type: "gif", gifId },
+	});
+	expect(sent.attachmentMetadata).toEqual({
+		...gif,
+		playbackUrl: await storage.getPlaybackUrl(gif.objectKey),
+		thumbnailUrl: await storage.getThumbnailUrl(gif.thumbnailKey),
+	});
+	expect(
+		(await service.listMessages(member, chat.id, 10)).messages[0]
+			.attachmentMetadata,
+	).toEqual(sent.attachmentMetadata);
+});
+
 test("sending a private message creates one conversation per pair and notifies only its members", async () => {
 	const { service, owner, member, outsider, notifications } = fixture();
 	const message = await service.sendPrivate(owner, member, { text: "Hello" });
