@@ -277,6 +277,13 @@ responses include `unseenMentions` for the authenticated user, alongside
 `lastSeenMessageId`. Each mention contains `userId`, `conversationId`, `messageId`,
 and `seen` (false in this array). An empty array means no unseen mentions.
 
+After a group message and its mentions are saved, each mentioned user receives
+`mention.created` over Socket.IO with `{ "mention": { "userId": "...",
+"conversationId": "...", "messageId": "...", "seen": false } }`. Only that
+user's connected devices receive this event, once per user per message. It also
+applies to forwarded messages and attachment captions. Offline users can retrieve
+their unseen mentions through the conversation endpoints after reconnecting.
+
 The mentioned user can call
 `PUT /api/conversations/:conversationId/mentions/:messageId/seen` with no body.
 It returns `{ "mention": { "userId": "...", "conversationId": "...",
@@ -425,6 +432,7 @@ offline users; retrieve persisted history through HTTP after reconnecting.
 | Event                                       | Payload                                                 |
 | ------------------------------------------- | ------------------------------------------------------- |
 | `message.created`                           | `{ message }`                                           |
+| `mention.created`                           | `{ mention: { userId, conversationId, messageId, seen } }` |
 | `message.updated`                           | `{ conversationId, messageId, text, isEdited }`           |
 | `message.reaction_changed`                  | `{ conversationId, messageId, userId, emoji, removed }` |
 | `conversation.updated`                      | `{ conversationId, name }`                              |

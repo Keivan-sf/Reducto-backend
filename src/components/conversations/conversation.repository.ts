@@ -69,7 +69,7 @@ export interface ConversationRepository {
 	deleteGroup(conversationId: string): Promise<void>;
 	createMessage(
 		message: Omit<Message, "id" | "createdAt" | "isEdited">,
-	): Promise<Message>;
+	): Promise<{ message: Message; mentions: Mention[] }>;
 	getMessage(id: string): Promise<Message | undefined>;
 	updateMessageText(
 		conversationId: string,
@@ -326,6 +326,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 				.values(message)
 				.returning();
 			const usernames = mentionedUsernames(message.text);
+			let mentions: Mention[] = [];
 			if (usernames.length) {
 				// Resolve usernames and membership together at insertion time. Mentions
 				// and the message commit atomically before message.created is published.
@@ -346,15 +347,18 @@ export class DrizzleConversationRepository implements ConversationRepository {
 					)
 					.for("key share", { of: conversationMembers });
 				if (mentioned.length)
-					await transaction.insert(messageMentions).values(
-						mentioned.map(({ userId }) => ({
-							userId,
-							conversationId: message.conversationId,
-							messageId: createdMessage.id,
-						})),
-					);
+					mentions = await transaction
+						.insert(messageMentions)
+						.values(
+							mentioned.map(({ userId }) => ({
+								userId,
+								conversationId: message.conversationId,
+								messageId: createdMessage.id,
+							})),
+						)
+						.returning();
 			}
-			return createdMessage;
+			return { message: createdMessage, mentions };
 		});
 	}
 

@@ -444,11 +444,16 @@ export class ConversationService {
 	private async saveMessage(
 		input: Omit<Message, "id" | "createdAt" | "isEdited">,
 	) {
-		const message = await this.repository.createMessage(input);
+		const { message, mentions } = await this.repository.createMessage(input);
 		const [enriched] = await this.withAttachmentMetadata([message]);
 		await this.publish(message.conversationId, "message.created", {
 			message: enriched,
 		});
+		for (const mention of mentions) {
+			this.notifications.publish([mention.userId], "mention.created", {
+				mention,
+			});
+		}
 		return enriched;
 	}
 

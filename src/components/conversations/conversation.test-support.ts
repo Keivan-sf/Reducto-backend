@@ -207,20 +207,23 @@ export class MemoryConversationRepository implements ConversationRepository {
 			isEdited: false,
 		};
 		this.messages.set(message.id, message);
+		const mentions: Mention[] = [];
 		if (this.conversations.get(input.conversationId)?.type === "group") {
 			for (const username of mentionedUsernames(input.text)) {
 				const userId = this.usernames.get(username);
 				if (userId && this.members.has(`${input.conversationId}:${userId}`)) {
-					this.mentions.set(`${message.id}:${userId}`, {
+					const mention = {
 						userId,
 						conversationId: input.conversationId,
 						messageId: message.id,
 						seen: false,
-					});
+					};
+					this.mentions.set(`${message.id}:${userId}`, mention);
+					mentions.push(mention);
 				}
 			}
 		}
-		return message;
+		return { message, mentions };
 	}
 	async getMessage(id: string) {
 		return this.messages.get(id);

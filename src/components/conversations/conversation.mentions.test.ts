@@ -1,4 +1,4 @@
-import { expect, test } from "@jest/globals";
+import { expect, jest, test } from "@jest/globals";
 import { randomUUID } from "node:crypto";
 import { mentionedUsernames } from "./conversation.mentions.js";
 import { ConversationService } from "./conversation.service.js";
@@ -10,10 +10,11 @@ import {
 
 async function fixture() {
 	const repository = new MemoryConversationRepository();
+	const notifications = new MemoryNotifications();
 	const service = new ConversationService(
 		repository,
 		new MemoryChatStorage(),
-		new MemoryNotifications(),
+		notifications,
 	);
 	const owner = randomUUID(),
 		member = randomUUID(),
@@ -24,8 +25,54 @@ async function fixture() {
 	repository.usernames.set("outsider", outsider);
 	const group = await service.createGroup(owner, "Mentions");
 	await service.addMember(owner, group.id, member);
-	return { repository, service, owner, member, outsider, group };
+	return { repository, service, notifications, owner, member, outsider, group };
 }
+
+test("mention notifications target persisted recipients once and failed message saves emit nothing", async () => {
+	const { repository, service, notifications, owner, member, group } =
+		await fixture();
+	notifications.events.length = 0;
+	const publish = jest.spyOn(notifications, "publish");
+	publish.mockImplementation((userIds, event, payload) => {
+		if (event === "mention.created") {
+			const { mention } = payload as {
+				mention: { messageId: string; userId: string };
+			};
+			expect(repository.messages.has(mention.messageId)).toBe(true);
+			expect(
+				repository.mentions.has(`${mention.messageId}:${mention.userId}`),
+			).toBe(true);
+		}
+		notifications.events.push({ userIds, event, payload });
+	});
+	const message = await service.sendMessage(owner, group.id, {
+		text: "@member_1 @MEMBER_1 @owner @outsider @missing",
+	});
+	expect(
+		notifications.events.filter((event) => event.event === "mention.created"),
+	).toEqual(
+		[member, owner].map((userId) => ({
+			userIds: [userId],
+			event: "mention.created",
+			payload: {
+				mention: {
+					userId,
+					conversationId: group.id,
+					messageId: message.id,
+					seen: false,
+				},
+			},
+		})),
+	);
+	notifications.events.length = 0;
+	jest
+		.spyOn(repository, "createMessage")
+		.mockRejectedValueOnce(new Error("Save failed"));
+	await expect(
+		service.sendMessage(owner, group.id, { text: "@member_1" }),
+	).rejects.toThrow("Save failed");
+	expect(notifications.events).toEqual([]);
+});
 
 test("mention parsing respects boundaries, case, punctuation and username length", () => {
 	expect(
