@@ -230,6 +230,35 @@ export const messages = pgTable(
 	],
 );
 
+export const messageMentions = pgTable(
+	"message_mentions",
+	{
+		userId: uuid("user_id").notNull(),
+		conversationId: uuid("conversation_id").notNull(),
+		messageId: uuid("message_id").notNull(),
+		seen: boolean("seen").notNull().default(false),
+	},
+	(table) => [
+		primaryKey({ columns: [table.messageId, table.userId] }),
+		foreignKey({
+			name: "mentions_member_fk",
+			columns: [table.conversationId, table.userId],
+			foreignColumns: [
+				conversationMembers.conversationId,
+				conversationMembers.userId,
+			],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "mentions_message_same_conversation_fk",
+			columns: [table.conversationId, table.messageId],
+			foreignColumns: [messages.conversationId, messages.id],
+		}).onDelete("cascade"),
+		index("mentions_unseen_user_conversation_idx")
+			.on(table.userId, table.conversationId)
+			.where(sql`${table.seen} = false`),
+	],
+);
+
 export const messageReactions = pgTable(
 	"message_reactions",
 	{

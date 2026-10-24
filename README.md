@@ -265,6 +265,30 @@ reactions; adding the same reaction twice is idempotent.
 
 ## Seen positions and unread counts
 
+Group messages scan text (including attachment captions and forwarded text) for
+case-insensitive `@username` mentions when sent. Only users who belong to the
+destination group at that time get a mention record; repeated mentions of the
+same user in one message create one record. Email addresses, unknown usernames,
+and username tokens longer than 32 characters are ignored. Editing a message
+does not change its mentions. Private conversations retain their existing behavior.
+
+`GET /api/conversations` group entries and `GET /api/conversations/:id` group
+responses include `unseenMentions` for the authenticated user, alongside
+`lastSeenMessageId`. Each mention contains `userId`, `conversationId`, `messageId`,
+and `seen` (false in this array). An empty array means no unseen mentions.
+
+The mentioned user can call
+`PUT /api/conversations/:conversationId/mentions/:messageId/seen` with no body.
+It returns `{ "mention": { "userId": "...", "conversationId": "...",
+"messageId": "...", "seen": true } }`. Repeating it succeeds. Current group
+membership is required; a missing mention or another user's mention returns
+`404`. Marking a mention seen and advancing the conversation's seen position
+are independent. Mentions are removed when their message, group, or recipient's
+membership is deleted. Rejoining does not restore earlier mentions.
+
+Run `pnpm db:migrate` to install the mention table. Historical messages are not
+backfilled.
+
 Each conversation membership stores `lastSeenMessageId`. It is `null` until the
 user explicitly marks a message as seen. Existing memberships also start with
 null; the migration does not infer read history. Reading message history, fetching

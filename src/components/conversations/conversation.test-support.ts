@@ -4,6 +4,7 @@ import type { ConversationRepository } from "./conversation.repository.js";
 import type { ChatObjectStorage } from "./conversation.service.js";
 import type {
 	NewMedia,
+	Mention,
 	Conversation,
 	Media,
 	GifMetadata,
@@ -13,6 +14,7 @@ import type {
 	Reaction,
 	ReactionEmoji,
 } from "./conversation.types.js";
+import { mentionedUsernames } from "./conversation.mentions.js";
 
 export class MemoryConversationRepository implements ConversationRepository {
 	readonly users = new Set<string>();
@@ -27,6 +29,29 @@ export class MemoryConversationRepository implements ConversationRepository {
 	readonly messages = new Map<string, Message>();
 	readonly media = new Map<string, Media>();
 	readonly reactions = new Map<string, Reaction>();
+	readonly mentions = new Map<string, Mention>();
+
+	async listUnseenMentions(userId: string, conversationIds: string[]) {
+		return [...this.mentions.values()]
+			.filter(
+				(mention) =>
+					mention.userId === userId &&
+					!mention.seen &&
+					conversationIds.includes(mention.conversationId),
+			)
+			.sort((a, b) => a.messageId.localeCompare(b.messageId));
+	}
+	async markMentionSeen(
+		conversationId: string,
+		userId: string,
+		messageId: string,
+	) {
+		const mention = this.mentions.get(`${messageId}:${userId}`);
+		if (!mention || mention.conversationId !== conversationId) return undefined;
+		const updated = { ...mention, seen: true };
+		this.mentions.set(`${messageId}:${userId}`, updated);
+		return updated;
+	}
 
 	async userExists(userId: string) {
 		return this.users.has(userId);
@@ -152,6 +177,12 @@ export class MemoryConversationRepository implements ConversationRepository {
 	}
 	async removeMember(conversationId: string, userId: string) {
 		this.members.delete(`${conversationId}:${userId}`);
+		for (const [key, mention] of this.mentions)
+			if (
+				mention.conversationId === conversationId &&
+				mention.userId === userId
+			)
+				this.mentions.delete(key);
 	}
 	async renameGroup(conversationId: string, name: string) {
 		const conversation = this.conversations.get(conversationId)!;
@@ -159,6 +190,8 @@ export class MemoryConversationRepository implements ConversationRepository {
 	}
 	async deleteGroup(conversationId: string) {
 		this.conversations.delete(conversationId);
+		for (const [key, mention] of this.mentions)
+			if (mention.conversationId === conversationId) this.mentions.delete(key);
 		for (const [key, member] of this.members)
 			if (member.conversationId === conversationId) this.members.delete(key);
 		for (const [key, message] of this.messages)
@@ -174,6 +207,19 @@ export class MemoryConversationRepository implements ConversationRepository {
 			isEdited: false,
 		};
 		this.messages.set(message.id, message);
+		if (this.conversations.get(input.conversationId)?.type === "group") {
+			for (const username of mentionedUsernames(input.text)) {
+				const userId = this.usernames.get(username);
+				if (userId && this.members.has(`${input.conversationId}:${userId}`)) {
+					this.mentions.set(`${message.id}:${userId}`, {
+						userId,
+						conversationId: input.conversationId,
+						messageId: message.id,
+						seen: false,
+					});
+				}
+			}
+		}
 		return message;
 	}
 	async getMessage(id: string) {

@@ -1,0 +1,881 @@
+{
+	"id": "576fee83-f4b0-4ea6-ae54-caec68dff301",
+	"prevId": "573ad65d-6771-4cbe-9adb-63609c87cae8",
+	"version": "7",
+	"dialect": "postgresql",
+	"tables": {
+		"public.conversation_media": {
+			"name": "conversation_media",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"conversation_id": {
+					"name": "conversation_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"uploader_id": {
+					"name": "uploader_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"type": {
+					"name": "type",
+					"type": "media_type",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"object_key": {
+					"name": "object_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"thumbnail_key": {
+					"name": "thumbnail_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"file_name": {
+					"name": "file_name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"title": {
+					"name": "title",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"artist": {
+					"name": "artist",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"cover_key": {
+					"name": "cover_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"content_type": {
+					"name": "content_type",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"file_size": {
+					"name": "file_size",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"width": {
+					"name": "width",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"height": {
+					"name": "height",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"duration_seconds": {
+					"name": "duration_seconds",
+					"type": "double precision",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"conversation_media_conversation_id_conversations_id_fk": {
+					"name": "conversation_media_conversation_id_conversations_id_fk",
+					"tableFrom": "conversation_media",
+					"tableTo": "conversations",
+					"columnsFrom": ["conversation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"conversation_media_uploader_id_users_id_fk": {
+					"name": "conversation_media_uploader_id_users_id_fk",
+					"tableFrom": "conversation_media",
+					"tableTo": "users",
+					"columnsFrom": ["uploader_id"],
+					"columnsTo": ["id"],
+					"onDelete": "restrict",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {
+				"conversation_media_dimensions_required": {
+					"name": "conversation_media_dimensions_required",
+					"value": "(\"conversation_media\".\"type\" IN ('image', 'video') AND \"conversation_media\".\"width\" IS NOT NULL AND \"conversation_media\".\"height\" IS NOT NULL AND \"conversation_media\".\"width\" > 0 AND \"conversation_media\".\"height\" > 0) OR (\"conversation_media\".\"type\" NOT IN ('image', 'video') AND \"conversation_media\".\"width\" IS NULL AND \"conversation_media\".\"height\" IS NULL)"
+				},
+				"conversation_media_thumbnail_required": {
+					"name": "conversation_media_thumbnail_required",
+					"value": "(\"conversation_media\".\"type\" = 'video' AND \"conversation_media\".\"thumbnail_key\" IS NOT NULL AND length(\"conversation_media\".\"thumbnail_key\") > 0) OR (\"conversation_media\".\"type\" <> 'video' AND \"conversation_media\".\"thumbnail_key\" IS NULL)"
+				},
+				"conversation_media_duration_required": {
+					"name": "conversation_media_duration_required",
+					"value": "(\"conversation_media\".\"type\" IN ('video', 'voice', 'music') AND \"conversation_media\".\"duration_seconds\" IS NOT NULL AND \"conversation_media\".\"duration_seconds\" > 0) OR (\"conversation_media\".\"type\" NOT IN ('video', 'voice', 'music') AND \"conversation_media\".\"duration_seconds\" IS NULL)"
+				}
+			},
+			"isRLSEnabled": false
+		},
+		"public.conversation_members": {
+			"name": "conversation_members",
+			"schema": "",
+			"columns": {
+				"conversation_id": {
+					"name": "conversation_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"role": {
+					"name": "role",
+					"type": "member_role",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'member'"
+				},
+				"last_seen_message_id": {
+					"name": "last_seen_message_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"joined_at": {
+					"name": "joined_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"members_user_idx": {
+					"name": "members_user_idx",
+					"columns": [
+						{
+							"expression": "user_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {
+				"conversation_members_conversation_id_conversations_id_fk": {
+					"name": "conversation_members_conversation_id_conversations_id_fk",
+					"tableFrom": "conversation_members",
+					"tableTo": "conversations",
+					"columnsFrom": ["conversation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"conversation_members_user_id_users_id_fk": {
+					"name": "conversation_members_user_id_users_id_fk",
+					"tableFrom": "conversation_members",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"members_last_seen_same_conversation_fk": {
+					"name": "members_last_seen_same_conversation_fk",
+					"tableFrom": "conversation_members",
+					"tableTo": "messages",
+					"columnsFrom": ["conversation_id", "last_seen_message_id"],
+					"columnsTo": ["conversation_id", "id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"conversation_members_conversation_id_user_id_pk": {
+					"name": "conversation_members_conversation_id_user_id_pk",
+					"columns": ["conversation_id", "user_id"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.conversations": {
+			"name": "conversations",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"type": {
+					"name": "type",
+					"type": "conversation_type",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"name": {
+					"name": "name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"private_key": {
+					"name": "private_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"invite_token": {
+					"name": "invite_token",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {
+				"conversations_private_key_unique": {
+					"name": "conversations_private_key_unique",
+					"nullsNotDistinct": false,
+					"columns": ["private_key"]
+				},
+				"conversations_invite_token_unique": {
+					"name": "conversations_invite_token_unique",
+					"nullsNotDistinct": false,
+					"columns": ["invite_token"]
+				}
+			},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.gifs": {
+			"name": "gifs",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"object_key": {
+					"name": "object_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"thumbnail_key": {
+					"name": "thumbnail_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"file_size": {
+					"name": "file_size",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"width": {
+					"name": "width",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"height": {
+					"name": "height",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"gifs_user_id_users_id_fk": {
+					"name": "gifs_user_id_users_id_fk",
+					"tableFrom": "gifs",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "restrict",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {
+				"gifs_object_key_unique": {
+					"name": "gifs_object_key_unique",
+					"nullsNotDistinct": false,
+					"columns": ["object_key"]
+				}
+			},
+			"policies": {},
+			"checkConstraints": {
+				"gifs_dimensions_required": {
+					"name": "gifs_dimensions_required",
+					"value": "\"gifs\".\"width\" IS NOT NULL AND \"gifs\".\"height\" IS NOT NULL AND \"gifs\".\"width\" > 0 AND \"gifs\".\"height\" > 0"
+				},
+				"gifs_thumbnail_required": {
+					"name": "gifs_thumbnail_required",
+					"value": "\"gifs\".\"thumbnail_key\" IS NOT NULL AND length(\"gifs\".\"thumbnail_key\") > 0"
+				}
+			},
+			"isRLSEnabled": false
+		},
+		"public.message_mentions": {
+			"name": "message_mentions",
+			"schema": "",
+			"columns": {
+				"user_id": {
+					"name": "user_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"conversation_id": {
+					"name": "conversation_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"message_id": {
+					"name": "message_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"seen": {
+					"name": "seen",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				}
+			},
+			"indexes": {
+				"mentions_unseen_user_conversation_idx": {
+					"name": "mentions_unseen_user_conversation_idx",
+					"columns": [
+						{
+							"expression": "user_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "conversation_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"where": "\"message_mentions\".\"seen\" = false",
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {
+				"mentions_member_fk": {
+					"name": "mentions_member_fk",
+					"tableFrom": "message_mentions",
+					"tableTo": "conversation_members",
+					"columnsFrom": ["conversation_id", "user_id"],
+					"columnsTo": ["conversation_id", "user_id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"mentions_message_same_conversation_fk": {
+					"name": "mentions_message_same_conversation_fk",
+					"tableFrom": "message_mentions",
+					"tableTo": "messages",
+					"columnsFrom": ["conversation_id", "message_id"],
+					"columnsTo": ["conversation_id", "id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"message_mentions_message_id_user_id_pk": {
+					"name": "message_mentions_message_id_user_id_pk",
+					"columns": ["message_id", "user_id"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.message_reactions": {
+			"name": "message_reactions",
+			"schema": "",
+			"columns": {
+				"message_id": {
+					"name": "message_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"emoji": {
+					"name": "emoji",
+					"type": "reaction_emoji",
+					"typeSchema": "public",
+					"primaryKey": false,
+					"notNull": true
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"message_reactions_message_id_messages_id_fk": {
+					"name": "message_reactions_message_id_messages_id_fk",
+					"tableFrom": "message_reactions",
+					"tableTo": "messages",
+					"columnsFrom": ["message_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"message_reactions_user_id_users_id_fk": {
+					"name": "message_reactions_user_id_users_id_fk",
+					"tableFrom": "message_reactions",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"message_reactions_message_id_user_id_emoji_pk": {
+					"name": "message_reactions_message_id_user_id_emoji_pk",
+					"columns": ["message_id", "user_id", "emoji"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.messages": {
+			"name": "messages",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"conversation_id": {
+					"name": "conversation_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"sender_id": {
+					"name": "sender_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"text": {
+					"name": "text",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"is_edited": {
+					"name": "is_edited",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"reply_to_message_id": {
+					"name": "reply_to_message_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"attachment": {
+					"name": "attachment",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"forwarded_from": {
+					"name": "forwarded_from",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"messages_conversation_created_idx": {
+					"name": "messages_conversation_created_idx",
+					"columns": [
+						{
+							"expression": "conversation_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "created_at",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {
+				"messages_conversation_id_conversations_id_fk": {
+					"name": "messages_conversation_id_conversations_id_fk",
+					"tableFrom": "messages",
+					"tableTo": "conversations",
+					"columnsFrom": ["conversation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"messages_sender_id_users_id_fk": {
+					"name": "messages_sender_id_users_id_fk",
+					"tableFrom": "messages",
+					"tableTo": "users",
+					"columnsFrom": ["sender_id"],
+					"columnsTo": ["id"],
+					"onDelete": "restrict",
+					"onUpdate": "no action"
+				},
+				"messages_reply_same_conversation_fk": {
+					"name": "messages_reply_same_conversation_fk",
+					"tableFrom": "messages",
+					"tableTo": "messages",
+					"columnsFrom": ["conversation_id", "reply_to_message_id"],
+					"columnsTo": ["conversation_id", "id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {
+				"messages_conversation_id_id_unique": {
+					"name": "messages_conversation_id_id_unique",
+					"nullsNotDistinct": false,
+					"columns": ["conversation_id", "id"]
+				}
+			},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.refresh_tokens": {
+			"name": "refresh_tokens",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"token_hash": {
+					"name": "token_hash",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"expires_at": {
+					"name": "expires_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"refresh_tokens_user_id_users_id_fk": {
+					"name": "refresh_tokens_user_id_users_id_fk",
+					"tableFrom": "refresh_tokens",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.user_gifs": {
+			"name": "user_gifs",
+			"schema": "",
+			"columns": {
+				"user_id": {
+					"name": "user_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"gif_id": {
+					"name": "gif_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {
+				"user_gifs_user_id_users_id_fk": {
+					"name": "user_gifs_user_id_users_id_fk",
+					"tableFrom": "user_gifs",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"user_gifs_gif_id_gifs_id_fk": {
+					"name": "user_gifs_gif_id_gifs_id_fk",
+					"tableFrom": "user_gifs",
+					"tableTo": "gifs",
+					"columnsFrom": ["gif_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"user_gifs_user_id_gif_id_pk": {
+					"name": "user_gifs_user_id_gif_id_pk",
+					"columns": ["user_id", "gif_id"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.users": {
+			"name": "users",
+			"schema": "",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": true,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"email": {
+					"name": "email",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"name": {
+					"name": "name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"username": {
+					"name": "username",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"avatar_key": {
+					"name": "avatar_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"password_hash": {
+					"name": "password_hash",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {
+				"users_email_unique": {
+					"name": "users_email_unique",
+					"nullsNotDistinct": false,
+					"columns": ["email"]
+				},
+				"users_username_unique": {
+					"name": "users_username_unique",
+					"nullsNotDistinct": false,
+					"columns": ["username"]
+				}
+			},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		}
+	},
+	"enums": {
+		"public.conversation_type": {
+			"name": "conversation_type",
+			"schema": "public",
+			"values": ["private", "group"]
+		},
+		"public.media_type": {
+			"name": "media_type",
+			"schema": "public",
+			"values": ["image", "video", "audio", "music", "voice", "document"]
+		},
+		"public.member_role": {
+			"name": "member_role",
+			"schema": "public",
+			"values": ["owner", "admin", "member"]
+		},
+		"public.reaction_emoji": {
+			"name": "reaction_emoji",
+			"schema": "public",
+			"values": ["👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "🎉"]
+		}
+	},
+	"schemas": {},
+	"sequences": {},
+	"roles": {},
+	"policies": {},
+	"views": {},
+	"_meta": {
+		"columns": {},
+		"schemas": {},
+		"tables": {}
+	}
+}

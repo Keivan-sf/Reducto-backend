@@ -54,6 +54,74 @@ async function fixture() {
 	return { app, alice, bob, outsider, storage, repository };
 }
 
+test("HTTP group mentions are private to the recipient and have an authenticated, validated seen endpoint", async () => {
+	const { app, alice, bob, outsider } = await fixture();
+	const created = await request(app)
+		.post("/api/groups")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ name: "Mentions" })
+		.expect(201);
+	const base = `/api/conversations/${created.body.conversation.id}`;
+	await request(app)
+		.post(`/api/groups/${created.body.conversation.id}/members`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(204);
+	const sent = await request(app)
+		.post(`${base}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Hi @BOB_123 @bob_123" })
+		.expect(201);
+	const mention = {
+		userId: bob.user.id,
+		conversationId: created.body.conversation.id,
+		messageId: sent.body.message.id,
+		seen: false,
+	};
+	const detail = await request(app)
+		.get(base)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(detail.body.conversation).toMatchObject({
+		lastSeenMessageId: null,
+		unseenMentions: [mention],
+	});
+	const list = await request(app)
+		.get("/api/conversations")
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(list.body.conversations[0].unseenMentions).toEqual([mention]);
+	const endpoint = `${base}/mentions/${sent.body.message.id}/seen`;
+	await request(app).put(endpoint).expect(401);
+	await request(app)
+		.put(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(404);
+	await request(app)
+		.put(endpoint)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(403);
+	await request(app)
+		.put(`${base}/mentions/invalid/seen`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(400);
+	for (let i = 0; i < 2; i++) {
+		const result = await request(app)
+			.put(endpoint)
+			.auth(bob.tokens.accessToken, { type: "bearer" })
+			.expect(200);
+		expect(result.body).toEqual({ mention: { ...mention, seen: true } });
+	}
+	const updated = await request(app)
+		.get(base)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(updated.body.conversation).toMatchObject({
+		lastSeenMessageId: null,
+		unseenMentions: [],
+	});
+});
+
 test("HTTP music uploads return embedded metadata in upload, message, history and metadata responses", async () => {
 	const { app, alice, bob } = await fixture();
 	const created = await request(app)

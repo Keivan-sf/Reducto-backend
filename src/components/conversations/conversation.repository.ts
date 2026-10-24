@@ -6,11 +6,13 @@ import {
 	conversations,
 	gifs,
 	messageReactions,
+	messageMentions,
 	messages,
 	users,
 } from "../../db/schema.js";
 import type {
 	NewMedia,
+	Mention,
 	Conversation,
 	ConversationListItem,
 	ReadState,
@@ -22,8 +24,18 @@ import type {
 	Reaction,
 	ReactionEmoji,
 } from "./conversation.types.js";
+import { mentionedUsernames } from "./conversation.mentions.js";
 
 export interface ConversationRepository {
+	listUnseenMentions(
+		userId: string,
+		conversationIds: string[],
+	): Promise<Mention[]>;
+	markMentionSeen(
+		conversationId: string,
+		userId: string,
+		messageId: string,
+	): Promise<Mention | undefined>;
 	userExists(userId: string): Promise<boolean>;
 	findUserIdByUsername(username: string): Promise<string | undefined>;
 	gifExists(gifId: string): Promise<boolean>;
@@ -308,11 +320,76 @@ export class DrizzleConversationRepository implements ConversationRepository {
 	}
 
 	async createMessage(message: Omit<Message, "id" | "createdAt" | "isEdited">) {
-		const [createdMessage] = await this.database
-			.insert(messages)
-			.values(message)
+		return this.database.transaction(async (transaction) => {
+			const [createdMessage] = await transaction
+				.insert(messages)
+				.values(message)
+				.returning();
+			const usernames = mentionedUsernames(message.text);
+			if (usernames.length) {
+				// Resolve usernames and membership together at insertion time. Mentions
+				// and the message commit atomically before message.created is published.
+				const mentioned = await transaction
+					.select({ userId: users.id })
+					.from(conversationMembers)
+					.innerJoin(users, eq(users.id, conversationMembers.userId))
+					.innerJoin(
+						conversations,
+						eq(conversations.id, conversationMembers.conversationId),
+					)
+					.where(
+						and(
+							eq(conversations.id, message.conversationId),
+							eq(conversations.type, "group"),
+							inArray(users.username, usernames),
+						),
+					)
+					.for("key share", { of: conversationMembers });
+				if (mentioned.length)
+					await transaction.insert(messageMentions).values(
+						mentioned.map(({ userId }) => ({
+							userId,
+							conversationId: message.conversationId,
+							messageId: createdMessage.id,
+						})),
+					);
+			}
+			return createdMessage;
+		});
+	}
+
+	async listUnseenMentions(userId: string, conversationIds: string[]) {
+		if (!conversationIds.length) return [];
+		return this.database
+			.select()
+			.from(messageMentions)
+			.where(
+				and(
+					eq(messageMentions.userId, userId),
+					eq(messageMentions.seen, false),
+					inArray(messageMentions.conversationId, conversationIds),
+				),
+			)
+			.orderBy(asc(messageMentions.messageId));
+	}
+
+	async markMentionSeen(
+		conversationId: string,
+		userId: string,
+		messageId: string,
+	) {
+		const [mention] = await this.database
+			.update(messageMentions)
+			.set({ seen: true })
+			.where(
+				and(
+					eq(messageMentions.conversationId, conversationId),
+					eq(messageMentions.userId, userId),
+					eq(messageMentions.messageId, messageId),
+				),
+			)
 			.returning();
-		return createdMessage;
+		return mention;
 	}
 
 	getMessage(id: string) {

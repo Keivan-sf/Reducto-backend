@@ -105,13 +105,25 @@ export class ConversationService {
 	}
 
 	async listConversations(userId: string) {
-		return (await this.repository.listConversations(userId)).map(
-			(conversation) => ({
-				...this.publicConversation(conversation),
-				lastSeenMessageId: conversation.lastSeenMessageId,
-				unreadCount: conversation.unreadCount,
-			}),
+		const conversations = await this.repository.listConversations(userId);
+		const mentions = await this.repository.listUnseenMentions(
+			userId,
+			conversations
+				.filter((conversation) => conversation.type === "group")
+				.map((conversation) => conversation.id),
 		);
+		return conversations.map((conversation) => ({
+			...this.publicConversation(conversation),
+			lastSeenMessageId: conversation.lastSeenMessageId,
+			unreadCount: conversation.unreadCount,
+			...(conversation.type === "group"
+				? {
+						unseenMentions: mentions.filter(
+							(mention) => mention.conversationId === conversation.id,
+						),
+					}
+				: {}),
+		}));
 	}
 
 	async markSeen(
@@ -146,10 +158,38 @@ export class ConversationService {
 	}
 
 	async getConversation(userId: string, conversationId: string) {
-		await this.requireMember(userId, conversationId);
+		const member = await this.requireMember(userId, conversationId);
 		const conversation = await this.repository.getConversation(conversationId);
 		if (!conversation) throw new HttpError(404, "Conversation not found");
-		return this.publicConversation(conversation);
+		return {
+			...this.publicConversation(conversation),
+			...(conversation.type === "group"
+				? {
+						lastSeenMessageId: member.lastSeenMessageId,
+						unseenMentions: await this.repository.listUnseenMentions(userId, [
+							conversationId,
+						]),
+					}
+				: {}),
+		};
+	}
+
+	async markMentionSeen(
+		userId: string,
+		conversationId: string,
+		messageId: string,
+	) {
+		await this.requireMember(userId, conversationId);
+		const conversation = await this.repository.getConversation(conversationId);
+		if (!conversation || conversation.type !== "group")
+			throw new HttpError(400, "This operation requires a group");
+		const mention = await this.repository.markMentionSeen(
+			conversationId,
+			userId,
+			messageId,
+		);
+		if (!mention) throw new HttpError(404, "Mention not found");
+		return mention;
 	}
 
 	async listMembers(userId: string, conversationId: string) {

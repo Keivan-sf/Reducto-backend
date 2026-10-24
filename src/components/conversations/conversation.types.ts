@@ -105,4 +105,10 @@ export type ReadState = {
 	lastSeenMessageId: string | null;
 	unreadCount: number;
 };
+export type Mention = {
+	userId: string;
+	conversationId: string;
+	messageId: string;
+	seen: boolean;
+};
 export type ConversationListItem = Conversation & ReadState;

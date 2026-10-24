@@ -128,6 +128,8 @@ export const chatSchemas = {
 		],
 	},
 	SendMessage: {
+		description:
+			"New group messages (including forwards and attachment captions) record case-insensitive @username mentions for current members, once per user per message. Email addresses and overlong tokens are ignored. Edits do not change mentions; private messages never create them.",
 		...object(
 			{
 				text: { type: "string", minLength: 1, maxLength: 10000 },
@@ -142,12 +144,32 @@ export const chatSchemas = {
 		),
 		anyOf: [{ required: ["text"] }, { required: ["attachment"] }],
 	},
-	Conversation: object({
-		id: uuid,
-		type: { type: "string", enum: ["private", "group"] },
-		name: { type: "string", nullable: true },
-		createdAt: { type: "string", format: "date-time" },
+	Mention: object({
+		userId: uuid,
+		conversationId: uuid,
+		messageId: uuid,
+		seen: { type: "boolean" },
 	}),
+	Conversation: object(
+		{
+			id: uuid,
+			type: { type: "string", enum: ["private", "group"] },
+			name: { type: "string", nullable: true },
+			createdAt: { type: "string", format: "date-time" },
+			lastSeenMessageId: {
+				...uuid,
+				nullable: true,
+				description: "Included when retrieving a group conversation.",
+			},
+			unseenMentions: {
+				type: "array",
+				items: reference("Mention"),
+				description:
+					"Included when retrieving a group conversation; only the authenticated user's unseen mentions.",
+			},
+		},
+		["id", "type", "name", "createdAt"],
+	),
 	ReadState: object({
 		lastSeenMessageId: { ...uuid, nullable: true },
 		unreadCount: {
@@ -157,14 +179,23 @@ export const chatSchemas = {
 				"Messages newer than the seen position, including your own; all messages if never seen",
 		},
 	}),
-	ConversationListItem: object({
-		id: uuid,
-		type: { type: "string", enum: ["private", "group"] },
-		name: { type: "string", nullable: true },
-		createdAt: { type: "string", format: "date-time" },
-		lastSeenMessageId: { ...uuid, nullable: true },
-		unreadCount: { type: "integer", minimum: 0 },
-	}),
+	ConversationListItem: object(
+		{
+			id: uuid,
+			type: { type: "string", enum: ["private", "group"] },
+			name: { type: "string", nullable: true },
+			createdAt: { type: "string", format: "date-time" },
+			lastSeenMessageId: { ...uuid, nullable: true },
+			unreadCount: { type: "integer", minimum: 0 },
+			unseenMentions: {
+				type: "array",
+				items: reference("Mention"),
+				description:
+					"Group conversations only; the authenticated user's unseen mentions.",
+			},
+		},
+		["id", "type", "name", "createdAt", "lastSeenMessageId", "unreadCount"],
+	),
 	Member: object({
 		conversationId: uuid,
 		userId: uuid,
@@ -353,6 +384,15 @@ export const chatPaths = {
 			object({ messageId: uuid }),
 			conversationParams,
 			reference("ReadState"),
+		),
+	},
+	"/api/conversations/{conversationId}/mentions/{messageId}/seen": {
+		put: operation(
+			"Mark my group mention seen (idempotent). Only the mentioned current member can do this; missing or another user's mention returns 404. Does not advance the conversation seen position.",
+			200,
+			undefined,
+			messageParams,
+			object({ mention: reference("Mention") }),
 		),
 	},
 

@@ -126,6 +126,18 @@ export function createConversationRouter(
 		}),
 	);
 
+	router.put(
+		"/:conversationId/mentions/:messageId/seen",
+		handle(async (request, response) => {
+			response.json({
+				mention: await service.markMentionSeen(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					String(request.params.messageId),
+				),
+			});
+		}),
+	);
 	router.get(
 		"/:conversationId",
 		handle(async (request, response) => {
