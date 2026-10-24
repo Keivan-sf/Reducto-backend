@@ -1,5 +1,9 @@
 import { basename, extname } from "node:path";
 import {
+	FfmpegMusicMetadataReader,
+	type MusicMetadataReader,
+} from "../../lib/music-metadata.js";
+import {
 	FfmpegVoiceConverter,
 	type VoiceConverter,
 } from "../../lib/voice-converter.js";
@@ -57,6 +61,7 @@ export class ConversationService {
 		private readonly thumbnails: ThumbnailGenerator = new FfmpegThumbnailGenerator(),
 		private readonly voiceConverter: VoiceConverter = new FfmpegVoiceConverter(),
 		private readonly durationReader: DurationReader = new FfprobeDurationReader(),
+		private readonly musicMetadataReader: MusicMetadataReader = new FfmpegMusicMetadataReader(),
 	) {}
 
 	private publicConversation(conversation: Conversation) {
@@ -670,6 +675,13 @@ export class ConversationService {
 				: null;
 		const thumbnail =
 			type === "video" ? await this.thumbnails.generate(file.buffer) : null;
+		const music =
+			type === "music"
+				? await this.musicMetadataReader.read(body)
+				: { title: null, artist: null, cover: null };
+		const coverKey = music.cover
+			? `covers/attachments/${conversationId}/${randomUUID()}.jpg`
+			: null;
 		const thumbnailKey = thumbnail
 			? `thumbnails/attachments/${conversationId}/${randomUUID()}.jpg`
 			: null;
@@ -687,6 +699,12 @@ export class ConversationService {
 					body: thumbnail,
 					contentType: "image/jpeg",
 				});
+			if (music.cover && coverKey)
+				await this.storage.putObject({
+					key: coverKey,
+					body: music.cover,
+					contentType: "image/jpeg",
+				});
 			media = await this.repository.createMedia({
 				conversationId,
 				uploaderId: userId,
@@ -694,6 +712,9 @@ export class ConversationService {
 				objectKey,
 				thumbnailKey,
 				fileName,
+				title: music.title,
+				artist: music.artist,
+				coverKey,
 				contentType,
 				fileSize: body.length,
 				durationSeconds,
@@ -703,6 +724,7 @@ export class ConversationService {
 			await Promise.allSettled([
 				this.storage.deleteObject(objectKey),
 				...(thumbnailKey ? [this.storage.deleteObject(thumbnailKey)] : []),
+				...(coverKey ? [this.storage.deleteObject(coverKey)] : []),
 			]);
 			throw error;
 		}
@@ -726,6 +748,9 @@ export class ConversationService {
 			...media,
 			thumbnailUrl: media.thumbnailKey
 				? await this.storage.getThumbnailUrl(media.thumbnailKey)
+				: null,
+			coverUrl: media.coverKey
+				? await this.storage.getThumbnailUrl(media.coverKey)
 				: null,
 		};
 	}

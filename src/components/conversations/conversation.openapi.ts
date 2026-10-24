@@ -62,6 +62,29 @@ export const chatSchemas = {
 				"First-frame JPEG URL, valid for 15 minutes. Refresh metadata to renew. Null for nonvideo attachments or historical videos awaiting backfill. Uses the video dimensions.",
 		},
 		fileName: { type: "string" },
+		title: {
+			type: "string",
+			nullable: true,
+			description: "Embedded music title; null when absent or not music.",
+		},
+		artist: {
+			type: "string",
+			nullable: true,
+			description: "Embedded music artist; null when absent or not music.",
+		},
+		coverKey: {
+			type: "string",
+			nullable: true,
+			description:
+				"Object key of the extracted JPEG music cover; null when absent.",
+		},
+		coverUrl: {
+			type: "string",
+			format: "uri",
+			nullable: true,
+			description:
+				"Signed music cover URL, valid for 15 minutes. Refresh attachment metadata to renew; null when absent.",
+		},
 		contentType: { type: "string" },
 		fileSize: {
 			type: "integer",

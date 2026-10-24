@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { taggedMusic } from "../../lib/music-metadata.test-support.js";
 import { voiceTestWav } from "../../lib/voice-converter.test-support.js";
 import { expect, jest, test } from "@jest/globals";
 import { randomUUID } from "node:crypto";
@@ -8,6 +9,12 @@ import {
 	MemoryConversationRepository,
 	MemoryNotifications,
 } from "./conversation.test-support.js";
+
+const fakeMusicMetadata = {
+	async read() {
+		return { title: null, artist: null, cover: null };
+	},
+};
 
 const fakeDuration = {
 	async read() {
@@ -225,6 +232,7 @@ test.each(["image", "video", "audio", "music", "voice", "document"] as const)(
 		const metadata = {
 			...media,
 			thumbnailUrl: await storage.getThumbnailUrl(media.thumbnailKey!),
+			coverUrl: null,
 		};
 		expect(sent.attachmentMetadata).toEqual(metadata);
 		expect(notifications.events.at(-1)?.payload).toMatchObject({
@@ -535,6 +543,7 @@ test("all attachment types are stored with their type and only members can uploa
 		},
 		undefined,
 		fakeDuration,
+		fakeMusicMetadata,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const inputs = [
@@ -942,6 +951,7 @@ test("video thumbnails survive forwarding, refresh URLs, and do not block downlo
 		},
 		undefined,
 		fakeDuration,
+		fakeMusicMetadata,
 	);
 	const source = await service.createPrivate(owner, member);
 	const target = await service.createPrivate(owner, outsider);
@@ -1021,6 +1031,7 @@ test.each([
 		undefined,
 		{ convertToOgg },
 		fakeDuration,
+		fakeMusicMetadata,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const file = {
@@ -1090,6 +1101,7 @@ test("music and ordinary audio preserve their original bytes and do not invoke v
 		undefined,
 		{ convertToOgg },
 		fakeDuration,
+		fakeMusicMetadata,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const file = {
@@ -1110,37 +1122,127 @@ test("music and ordinary audio preserve their original bytes and do not invoke v
 	expect(convertToOgg).not.toHaveBeenCalled();
 });
 
-test("music duration is stored and included in message and forwarded metadata", async () => {
-	const { service, owner, member, outsider } = fixture();
+test("music tags, cover, duration and size are stored and included in messages and forwards", async () => {
+	const {
+		service,
+		repository,
+		storage,
+		notifications,
+		owner,
+		member,
+		outsider,
+	} = fixture();
 	const source = await service.createPrivate(owner, member);
 	const target = await service.createPrivate(member, outsider);
+	const buffer = await taggedMusic();
 	const media = await service.uploadAttachment(
 		owner,
 		source.id,
 		{
-			buffer: voiceTestWav(2),
-			mimetype: "audio/wav",
-			originalname: "song.wav",
+			buffer,
+			mimetype: "audio/mpeg",
+			originalname: "song.mp3",
 		},
 		"music",
 	);
-	expect(media.durationSeconds).toBeCloseTo(2, 1);
+	expect(media.durationSeconds).toBeCloseTo(1, 1);
+	const metadata = {
+		title: "آهنگ Test",
+		artist: "Test Artist",
+		coverKey: expect.any(String),
+		coverUrl: expect.any(String),
+		fileSize: buffer.length,
+		durationSeconds: media.durationSeconds,
+	};
+	expect(media).toMatchObject(metadata);
+	expect(repository.media.get(media.id)).toMatchObject({
+		title: metadata.title,
+		artist: metadata.artist,
+		coverKey: media.coverKey,
+	});
+	expect(
+		await sharp(storage.objects.get(media.coverKey!)!).metadata(),
+	).toMatchObject({ format: "jpeg" });
+	expect(storage.objects.get(media.objectKey)).toEqual(buffer);
+	expect(await service.getAttachment(member, source.id, media.id)).toEqual(
+		media,
+	);
 	const message = await service.sendMessage(owner, source.id, {
 		attachment: { type: "music", mediaId: media.id },
 	});
 	expect(message.attachmentMetadata).toMatchObject({
-		durationSeconds: media.durationSeconds,
+		...metadata,
+	});
+	expect(notifications.events.at(-1)?.payload).toMatchObject({
+		message: { attachmentMetadata: metadata },
 	});
 	const forwarded = await service.forwardMessage(member, target.id, message.id);
 	expect(forwarded.attachmentMetadata).toMatchObject({
-		durationSeconds: media.durationSeconds,
+		...metadata,
 	});
 	expect(
 		(await service.listMessages(outsider, target.id, 10)).messages[0]
 			.attachmentMetadata,
 	).toMatchObject({
-		durationSeconds: media.durationSeconds,
+		...metadata,
 	});
+});
+
+test("untagged music returns null tags and artwork", async () => {
+	const { service, owner, member } = fixture();
+	const chat = await service.createPrivate(owner, member);
+	const media = await service.uploadAttachment(
+		owner,
+		chat.id,
+		{
+			buffer: voiceTestWav(),
+			mimetype: "audio/wav",
+			originalname: "untagged.wav",
+		},
+		"music",
+	);
+	expect(media).toMatchObject({
+		title: null,
+		artist: null,
+		coverKey: null,
+		coverUrl: null,
+	});
+});
+
+test("failed music persistence cleans up both the original file and cover", async () => {
+	const { repository, storage, notifications, owner, member } = fixture();
+	const service = new ConversationService(
+		repository,
+		storage,
+		notifications,
+		undefined,
+		undefined,
+		undefined,
+		fakeDuration,
+		{
+			async read() {
+				return { title: "Track", artist: "Artist", cover: Buffer.from("jpeg") };
+			},
+		},
+	);
+	const chat = await service.createPrivate(owner, member);
+	jest
+		.spyOn(repository, "createMedia")
+		.mockRejectedValue(new Error("database unavailable"));
+	await expect(
+		service.uploadAttachment(
+			owner,
+			chat.id,
+			{
+				buffer: Buffer.from("music"),
+				mimetype: "audio/mpeg",
+				originalname: "track.mp3",
+			},
+			"music",
+		),
+	).rejects.toThrow("database unavailable");
+	expect(storage.objects.size).toBe(0);
+	expect(repository.media.size).toBe(0);
 });
 
 test("voice uploads enforce membership, size limits, valid audio, and clean up failed persistence", async () => {
@@ -1155,6 +1257,7 @@ test("voice uploads enforce membership, size limits, valid audio, and clean up f
 		undefined,
 		{ convertToOgg },
 		fakeDuration,
+		fakeMusicMetadata,
 	);
 	const chat = await service.createPrivate(owner, member);
 	const file = {

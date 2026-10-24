@@ -1,5 +1,15 @@
 # Reducto backend
 
+Music uploaded with multipart `kind=music` stores embedded `title` and `artist`
+tags and extracts embedded cover artwork as a JPEG under `covers/attachments/`.
+Upload responses, attachment metadata, message history, forwards, and realtime
+message notifications include `title`, `artist`, `coverKey`, and `coverUrl`
+alongside `durationSeconds`, `fileSize` (bytes), and the original `fileName`.
+The cover URL expires after 15 minutes; request attachment metadata again to
+refresh it. Missing tags or artwork return `null`, as do these fields on other
+attachment types. Existing uploads keep null values; this change applies to new
+music uploads. Run `pnpm run db:migrate` before starting the updated API.
+
 Install dependencies with `pnpm install`. Install `ffmpeg` and `ffprobe` on the API server and
 make them available on `PATH`; voice uploads require its `libopus` encoder,
 GIF/video uploads use its H.264 encoder, and

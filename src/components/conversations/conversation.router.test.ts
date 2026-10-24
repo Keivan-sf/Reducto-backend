@@ -1,4 +1,5 @@
 import { voiceTestWav } from "../../lib/voice-converter.test-support.js";
+import { taggedMusic } from "../../lib/music-metadata.test-support.js";
 import { FfmpegGifConverter } from "../../lib/gif-converter.js";
 import sharp from "sharp";
 import { expect, jest, test } from "@jest/globals";
@@ -52,6 +53,55 @@ async function fixture() {
 	app.use(errorHandler);
 	return { app, alice, bob, outsider, storage, repository };
 }
+
+test("HTTP music uploads return embedded metadata in upload, message, history and metadata responses", async () => {
+	const { app, alice, bob } = await fixture();
+	const created = await request(app)
+		.post(`/api/conversations/private/${bob.user.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Music" })
+		.expect(201);
+	const base = `/api/conversations/${created.body.message.conversationId}`;
+	const buffer = await taggedMusic();
+	const uploaded = await request(app)
+		.post(`${base}/attachments`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.field("kind", "music")
+		.attach("file", buffer, {
+			filename: "track.mp3",
+			contentType: "audio/mpeg",
+		})
+		.expect(201);
+	const media = uploaded.body.attachment;
+	expect(media).toMatchObject({
+		type: "music",
+		title: "آهنگ Test",
+		artist: "Test Artist",
+		coverUrl: expect.any(String),
+		fileSize: buffer.length,
+	});
+	expect(media.durationSeconds).toBeGreaterThan(0);
+	const sent = await request(app)
+		.post(`${base}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ attachment: { type: "music", mediaId: media.id } })
+		.expect(201);
+	expect(sent.body.message.attachmentMetadata).toEqual(media);
+	const metadata = await request(app)
+		.get(`${base}/attachments/${media.id}/metadata`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(metadata.body.attachment).toEqual(media);
+	const history = await request(app)
+		.get(`${base}/messages`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(
+		history.body.messages.find(
+			(message: { id: string }) => message.id === sent.body.message.id,
+		).attachmentMetadata,
+	).toEqual(media);
+});
 
 test("HTTP uploads accept any file as a document and preserve it through sending and downloading", async () => {
 	const { app, alice, bob } = await fixture();

@@ -10,6 +10,7 @@ import {
 	users,
 } from "../../db/schema.js";
 import type {
+	NewMedia,
 	Conversation,
 	ConversationListItem,
 	ReadState,
@@ -75,7 +76,7 @@ export interface ConversationRepository {
 		limit: number,
 		after: Message,
 	): Promise<Message[]>;
-	createMedia(media: Omit<Media, "id" | "createdAt">): Promise<Media>;
+	createMedia(media: NewMedia): Promise<Media>;
 	getMedia(id: string): Promise<Media | undefined>;
 	listMedia(ids: string[]): Promise<Media[]>;
 	listGifs(
@@ -376,7 +377,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		});
 	}
 
-	async createMedia(media: Omit<Media, "id" | "createdAt">) {
+	async createMedia(media: NewMedia) {
 		const [createdMedia] = await this.database
 			.insert(conversationMedia)
 			.values(media)

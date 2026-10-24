@@ -37,6 +37,9 @@ export type Media = {
 	objectKey: string;
 	thumbnailKey: string | null;
 	fileName: string;
+	title: string | null;
+	artist: string | null;
+	coverKey: string | null;
 	contentType: string;
 	fileSize: number;
 	width: number | null;
@@ -56,9 +59,16 @@ export type GifMetadata = {
 	playbackUrl: string;
 	thumbnailUrl: string | null;
 };
+export type NewMedia = Omit<
+	Media,
+	"id" | "createdAt" | "title" | "artist" | "coverKey"
+> &
+	Partial<Pick<Media, "title" | "artist" | "coverKey">>;
 export type MessageWithMetadata = Message & {
 	attachmentMetadata:
-		(Media & { thumbnailUrl: string | null }) | GifMetadata | null;
+		| (Media & { thumbnailUrl: string | null; coverUrl: string | null })
+		| GifMetadata
+		| null;
 };
 export type ForwardOrigin = {
 	messageId: string;
