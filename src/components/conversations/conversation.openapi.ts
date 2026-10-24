@@ -298,7 +298,7 @@ export const chatPaths = {
 	},
 	"/api/conversations": {
 		get: operation(
-			"List my conversations",
+			"List my conversations (private conversations appear only after a message is sent)",
 			200,
 			undefined,
 			[],
@@ -312,7 +312,7 @@ export const chatPaths = {
 	},
 	"/api/conversations/private": {
 		post: operation(
-			"Create or reuse a private conversation by user ID or username",
+			"Create or reuse the unique private conversation by user ID or username, without notifications; hidden from lists until a message is sent",
 			200,
 			privateRecipientBody,
 			[],

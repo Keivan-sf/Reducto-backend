@@ -82,6 +82,13 @@ export class MemoryConversationRepository implements ConversationRepository {
 			.filter((conversation) =>
 				this.members.has(`${conversation.id}:${userId}`),
 			)
+			.filter(
+				(conversation) =>
+					conversation.type === "group" ||
+					[...this.messages.values()].some(
+						(message) => message.conversationId === conversation.id,
+					),
+			)
 			.map((conversation) => ({
 				...conversation,
 				...this.readState(conversation.id, userId),

@@ -70,10 +70,14 @@ test.each(["private", "group"] as const)(
 			chat,
 			message,
 		} = await fixture(type);
-		expect((await service.listConversations(owner))[0]).toMatchObject({
-			lastSeenMessageId: null,
-			unreadCount: 0,
-		});
+		if (type === "private") {
+			expect(await service.listConversations(owner)).toEqual([]);
+		} else {
+			expect((await service.listConversations(owner))[0]).toMatchObject({
+				lastSeenMessageId: null,
+				unreadCount: 0,
+			});
+		}
 		const first = message(1, 1000, owner);
 		const second = message(2, 2000);
 		message(3, 2000); // Same timestamp: UUID ordering breaks the tie.

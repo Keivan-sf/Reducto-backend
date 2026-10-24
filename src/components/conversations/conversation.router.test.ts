@@ -322,6 +322,50 @@ test("HTTP group invites join the group and only owners grant admin or delete", 
 		.expect(404);
 });
 
+test("HTTP private conversations are hidden until the first message, readable by ID, and reused by either participant", async () => {
+	const { app, alice, bob, repository } = await fixture();
+	const created = await request(app)
+		.post("/api/conversations/private")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ userId: bob.user.id })
+		.expect(200);
+	const chat = created.body.conversation;
+	for (const account of [alice, bob]) {
+		const list = await request(app)
+			.get("/api/conversations")
+			.auth(account.tokens.accessToken, { type: "bearer" })
+			.expect(200);
+		expect(list.body.conversations).toEqual([]);
+		const detail = await request(app)
+			.get(`/api/conversations/${chat.id}`)
+			.auth(account.tokens.accessToken, { type: "bearer" })
+			.expect(200);
+		expect(detail.body.conversation).toEqual(chat);
+	}
+	const reverse = await request(app)
+		.post("/api/conversations/private")
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ username: "ALICE" })
+		.expect(200);
+	expect(reverse.body.conversation).toEqual(chat);
+	const sent = await request(app)
+		.post(`/api/conversations/private/${alice.user.id}/messages`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Hello" })
+		.expect(201);
+	expect(sent.body.message.conversationId).toBe(chat.id);
+	for (const account of [alice, bob]) {
+		const list = await request(app)
+			.get("/api/conversations")
+			.auth(account.tokens.accessToken, { type: "bearer" })
+			.expect(200);
+		expect(list.body.conversations).toEqual([
+			{ ...chat, lastSeenMessageId: null, unreadCount: 1 },
+		]);
+	}
+	expect(repository.conversations.size).toBe(1);
+});
+
 test("HTTP chats can start by username and send messages without knowing the recipient ID", async () => {
 	const { app, alice, bob } = await fixture();
 	const endpoint = "/api/conversations/private";

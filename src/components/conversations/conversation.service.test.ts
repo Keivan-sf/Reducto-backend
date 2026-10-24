@@ -306,6 +306,77 @@ test("GIF message metadata includes playable and thumbnail URLs", async () => {
 	).toEqual(sent.attachmentMetadata);
 });
 
+test("empty private conversations stay silent and hidden, remain readable, and are reused in either direction", async () => {
+	const { service, repository, owner, member, outsider, notifications } =
+		fixture();
+	repository.usernames.set("recipient", member);
+	const chat = await service.createPrivate(owner, member);
+	const attempts = await Promise.all([
+		service.createPrivate(owner, member),
+		service.createPrivate(member, owner),
+		service.createPrivateByUsername(owner, "RECIPIENT"),
+	]);
+	expect(attempts).toEqual([chat, chat, chat]);
+	expect(repository.conversations.size).toBe(1);
+	expect(await repository.listMembers(chat.id)).toHaveLength(2);
+	for (const userId of [owner, member]) {
+		expect(await service.listConversations(userId)).toEqual([]);
+		expect(await service.getConversation(userId, chat.id)).toEqual(chat);
+	}
+	await expect(
+		service.getConversation(outsider, chat.id),
+	).rejects.toMatchObject({ status: 403 });
+	expect(notifications.events).toEqual([]);
+
+	await expect(
+		service.sendMessage(owner, chat.id, { text: " " }),
+	).rejects.toMatchObject({ status: 400 });
+	// Uploading media alone does not make a conversation visible.
+	const media = await service.uploadAttachment(owner, chat.id, {
+		buffer: Buffer.from("notes"),
+		mimetype: "text/plain",
+		originalname: "notes.txt",
+	});
+	for (const userId of [owner, member])
+		expect(await service.listConversations(userId)).toEqual([]);
+	expect(notifications.events).toEqual([]);
+
+	const message = await service.sendMessage(owner, chat.id, {
+		attachment: { type: "document", mediaId: media.id },
+	});
+	for (const userId of [owner, member])
+		expect(await service.listConversations(userId)).toEqual([
+			{ ...chat, lastSeenMessageId: null, unreadCount: 1 },
+		]);
+	expect(notifications.events).toEqual([
+		{
+			event: "message.created",
+			userIds: expect.arrayContaining([owner, member]),
+			payload: { message },
+		},
+	]);
+	expect(await service.createPrivate(member, owner)).toEqual(chat);
+	expect(repository.conversations.size).toBe(1);
+	expect(notifications.events).toHaveLength(1);
+});
+
+test("empty groups remain visible and separate group conversations can have the same members", async () => {
+	const { service, owner, member } = fixture();
+	const groups = await Promise.all([
+		service.createGroup(owner, "First"),
+		service.createGroup(owner, "Second"),
+	]);
+	for (const group of groups) await service.addMember(owner, group.id, member);
+	await service.createPrivate(owner, member);
+	for (const userId of [owner, member]) {
+		const listed = await service.listConversations(userId);
+		expect(listed.map((chat) => chat.id).sort()).toEqual(
+			groups.map((group) => group.id).sort(),
+		);
+		expect(listed.every((chat) => chat.unreadCount === 0)).toBe(true);
+	}
+});
+
 test("sending a private message creates one conversation per pair and notifies only its members", async () => {
 	const { service, owner, member, outsider, notifications } = fixture();
 	const message = await service.sendPrivate(owner, member, { text: "Hello" });

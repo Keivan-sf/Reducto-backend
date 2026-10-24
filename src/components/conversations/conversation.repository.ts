@@ -196,7 +196,15 @@ export class DrizzleConversationRepository implements ConversationRepository {
 				conversations,
 				eq(conversations.id, conversationMembers.conversationId),
 			)
-			.where(eq(conversationMembers.userId, userId))
+			.where(
+				and(
+					eq(conversationMembers.userId, userId),
+					or(
+						eq(conversations.type, "group"),
+						sql`EXISTS (SELECT 1 FROM messages WHERE messages.conversation_id = conversations.id)`,
+					),
+				),
+			)
 			.orderBy(desc(conversations.createdAt));
 		return rows.map((row) => ({
 			...row.conversation,
