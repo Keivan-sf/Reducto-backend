@@ -620,7 +620,7 @@ export class ConversationService {
 		userId: string,
 		conversationId: string,
 		file: { buffer: Buffer; mimetype: string; originalname: string },
-		kind?: "music" | "voice",
+		kind?: "music" | "voice" | "document",
 	) {
 		await this.requireMember(userId, conversationId);
 		if (!file.buffer.length || file.buffer.length > MAX_ATTACHMENT_SIZE_BYTES)
@@ -628,7 +628,7 @@ export class ConversationService {
 		let contentType = file.mimetype;
 		let body = file.buffer;
 		let fileName = file.originalname;
-		if (contentType === "image/gif")
+		if (contentType === "image/gif" && kind !== "document")
 			throw new HttpError(
 				400,
 				"Upload GIFs through /api/gifs, then use their GIF ID",
@@ -640,7 +640,9 @@ export class ConversationService {
 				: contentType.startsWith("audio/")
 					? "audio"
 					: "document";
-		if (kind === "voice") {
+		if (kind === "document") {
+			type = "document";
+		} else if (kind === "voice") {
 			const mimeType = contentType.split(";", 1)[0].trim().toLowerCase();
 			if (!mimeType.startsWith("audio/") && mimeType !== "application/ogg")
 				throw new HttpError(400, "Voice messages must be audio files");

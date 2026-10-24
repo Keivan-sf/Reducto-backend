@@ -174,7 +174,7 @@ members immediately lose access to future requests and notifications.
 | GET          | `/api/conversations/:id/messages?limit=50&before=messageId` | History, newest first; use `nextCursor` for the next page                                         |
 | POST         | `/api/conversations/:id/messages`                           | Send text and/or one attachment                                                                   |
 | POST         | `/api/conversations/:id/forward`                            | Forward `{ "messageId": "..." }` from a chat I can access                                         |
-| POST         | `/api/conversations/:id/attachments`                        | Upload multipart `file`, optionally `kind=music` or `kind=voice`                                                  |
+| POST         | `/api/conversations/:id/attachments`                        | Upload multipart `file`, optionally `kind=music`, `kind=voice`, or `kind=document`                                                  |
 | GET          | `/api/conversations/:id/attachments/:mediaId`               | Download an attachment                                                                            |
 | PUT / DELETE | `/api/conversations/:id/messages/:messageId/reactions`      | Add/remove my `{ "emoji": "👍" }` reaction                                                        |
 
@@ -238,9 +238,14 @@ their origin metadata but do not inherit the source message's reply reference.
 For non-GIF attachments, first upload the file to the destination conversation,
 then use the returned attachment `id` and `type`. The server classifies image,
 video, audio, and document uploads by their declared MIME type; audio files
-uploaded with `kind=music` use the `music` type. The limit is 50 MB per file.
-GIFs use the existing `/api/gifs` upload/conversion flow and are referenced only by
-GIF ID. Uploaders cannot attach another user's file as their own; use forwarding
+uploaded with `kind=music` use the `music` type. Set multipart `kind=document`
+to upload any file as a document, including images, videos, audio, and GIFs.
+This preserves the original bytes, filename, and MIME type without conversion,
+dimension extraction, duration extraction, or thumbnails. Send the resulting
+attachment with `{ "type": "document", "mediaId": "<uploaded attachment UUID>" }`.
+The limit remains 50 MB per file. Animated GIF messages use the existing
+`/api/gifs` upload/conversion flow and are referenced only by GIF ID.
+Uploaders cannot attach another user's file as their own; use forwarding
 to share an existing message. Forwarding checks both conversations and retains
 the original sender information. Forwarded file references remain downloadable
 in their destination even if the source group is deleted.

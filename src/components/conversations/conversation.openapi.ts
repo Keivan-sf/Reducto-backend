@@ -382,7 +382,7 @@ export const chatPaths = {
 	"/api/conversations/{conversationId}/attachments": {
 		post: {
 			...operation(
-				"Upload one attachment (max 50 MB); GIFs use /api/gifs",
+				"Upload one attachment (max 50 MB); animated GIF messages use /api/gifs",
 				201,
 				undefined,
 				conversationParams,
@@ -397,9 +397,9 @@ export const chatPaths = {
 								file: { type: "string", format: "binary" },
 								kind: {
 									type: "string",
-									enum: ["music", "voice"],
+									enum: ["music", "voice", "document"],
 									description:
-										"Use voice for speech uploads: audio is converted to mono Ogg Opus at a target bitrate of 30 kbit/s. Music and ordinary audio preserve the original file.",
+										"Use document to send any file (including images, videos, audio, and GIFs) as a document, preserving its original bytes, filename, and MIME type without media processing. Omit kind for automatic classification. Use voice for speech uploads: audio is converted to mono Ogg Opus at a target bitrate of 30 kbit/s. Music and ordinary audio preserve the original file.",
 								},
 							},
 							["file"],

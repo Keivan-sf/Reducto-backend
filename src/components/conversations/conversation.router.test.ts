@@ -53,6 +53,71 @@ async function fixture() {
 	return { app, alice, bob, outsider, storage, repository };
 }
 
+test("HTTP uploads accept any file as a document and preserve it through sending and downloading", async () => {
+	const { app, alice, bob } = await fixture();
+	const created = await request(app)
+		.post(`/api/conversations/private/${bob.user.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Files" })
+		.expect(201);
+	const path = `/api/conversations/${created.body.message.conversationId}`;
+	for (const [filename, contentType] of [
+		["photo.png", "image/png"],
+		["clip.mp4", "video/mp4"],
+		["song.mp3", "audio/mpeg"],
+		["animation.gif", "image/gif"],
+		["archive.zip", "application/zip"],
+		["unknown.bin", "application/octet-stream"],
+	]) {
+		// Deliberately opaque bytes: documents must bypass media decoding.
+		const bytes = Buffer.from(`Original bytes for ${filename}`);
+		const uploaded = await request(app)
+			.post(`${path}/attachments`)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.field("kind", "document")
+			.attach("file", bytes, { filename, contentType })
+			.expect(201);
+		const media = uploaded.body.attachment;
+		expect(media).toMatchObject({
+			type: "document",
+			fileName: filename,
+			contentType,
+			fileSize: bytes.length,
+			width: null,
+			height: null,
+			durationSeconds: null,
+			thumbnailUrl: null,
+		});
+		const sent = await request(app)
+			.post(`${path}/messages`)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.send({ attachment: { type: "document", mediaId: media.id } })
+			.expect(201);
+		expect(sent.body.message.attachmentMetadata).toEqual(media);
+		const metadata = await request(app)
+			.get(`${path}/attachments/${media.id}/metadata`)
+			.auth(bob.tokens.accessToken, { type: "bearer" })
+			.expect(200);
+		expect(metadata.body.attachment).toEqual(media);
+		const downloaded = await request(app)
+			.get(`${path}/attachments/${media.id}`)
+			.auth(bob.tokens.accessToken, { type: "bearer" })
+			.buffer(true)
+			.parse((response, callback) => {
+				const chunks: Buffer[] = [];
+				response.on("data", (chunk: Buffer) => chunks.push(chunk));
+				response.on("end", () => callback(null, Buffer.concat(chunks)));
+			})
+			.expect(200);
+		expect(downloaded.body).toEqual(bytes);
+		await request(app)
+			.post(`${path}/messages`)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.send({ attachment: { type: "image", mediaId: media.id } })
+			.expect(400);
+	}
+});
+
 test("HTTP PATCH edits only an authenticated sender's message text", async () => {
 	const { app, alice, bob, outsider } = await fixture();
 	const sent = await request(app)

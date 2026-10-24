@@ -284,7 +284,9 @@ export function createConversationRouter(
 				return;
 			}
 			const input = parseInput(
-				z.object({ kind: z.enum(["music", "voice"]).optional() }).strict(),
+				z
+					.object({ kind: z.enum(["music", "voice", "document"]).optional() })
+					.strict(),
 				request.body,
 			);
 			const attachment = await service.uploadAttachment(
