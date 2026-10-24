@@ -63,7 +63,11 @@ export const chatSchemas = {
 		},
 		fileName: { type: "string" },
 		contentType: { type: "string" },
-		fileSize: { type: "integer" },
+		fileSize: {
+			type: "integer",
+			description:
+				"Stored attachment size in bytes for every media type, including documents. For voice messages, this is the converted Ogg file size.",
+		},
 		durationSeconds: {
 			type: "number",
 			format: "double",
@@ -162,7 +166,7 @@ export const chatSchemas = {
 			oneOf: [reference("Media"), reference("Gif")],
 			nullable: true,
 			description:
-				"Full media or GIF metadata for the attachment, including fresh signed preview URLs. Null when there is no attachment or its record is unavailable.",
+				"Full media or GIF metadata for the attachment, including fileSize in bytes and fresh signed preview URLs. Null when there is no attachment or its record is unavailable.",
 		},
 		forwardedFrom: {
 			...object({ messageId: uuid, conversationId: uuid, senderId: uuid }),

@@ -193,76 +193,80 @@ test("the edited flag persists across message reads and new forwards start unedi
 	expect(forwarded.isEdited).toBe(false);
 });
 
-test("attachment metadata accompanies messages across reads, forwards, and notifications", async () => {
-	const {
-		service,
-		repository,
-		storage,
-		notifications,
-		owner,
-		member,
-		outsider,
-	} = fixture();
-	const chat = await service.createPrivate(owner, member);
-	const media = await repository.createMedia({
-		conversationId: chat.id,
-		uploaderId: owner,
-		type: "video",
-		objectKey: "attachments/clip.mp4",
-		thumbnailKey: "thumbnails/clip.jpg",
-		fileName: "clip.mp4",
-		contentType: "video/mp4",
-		fileSize: 123,
-		width: 64,
-		height: 48,
-		durationSeconds: 1.25,
-	});
-	const sent = await service.sendMessage(owner, chat.id, {
-		attachment: { type: "video", mediaId: media.id },
-	});
-	const metadata = {
-		...media,
-		thumbnailUrl: await storage.getThumbnailUrl(media.thumbnailKey!),
-	};
-	expect(sent.attachmentMetadata).toEqual(metadata);
-	expect(notifications.events.at(-1)?.payload).toMatchObject({
-		message: { attachmentMetadata: metadata },
-	});
-	expect(
-		(await service.listMessages(member, chat.id, 10)).messages[0]
-			.attachmentMetadata,
-	).toEqual(metadata);
-	expect(
-		(await service.getMessage(member, chat.id, sent.id)).attachmentMetadata,
-	).toEqual(metadata);
-	expect(
-		(await service.getFirstMessage(member, chat.id))?.attachmentMetadata,
-	).toEqual(metadata);
-	expect(
-		(await service.getMessagesAround(member, chat.id, sent.id)).message
-			.attachmentMetadata,
-	).toEqual(metadata);
-	const destination = await service.createPrivate(member, outsider);
-	const forwarded = await service.forwardMessage(
-		member,
-		destination.id,
-		sent.id,
-	);
-	if (forwarded.attachment?.type !== "video")
-		throw new Error("Expected a forwarded video");
-	expect(forwarded.attachmentMetadata).toMatchObject({
-		id: forwarded.attachment.mediaId,
-		fileName: media.fileName,
-		width: media.width,
-		thumbnailUrl: metadata.thumbnailUrl,
-	});
-	expect(
-		(await service.listMessages(outsider, destination.id, 10)).messages[0]
-			.attachmentMetadata,
-	).toEqual(forwarded.attachmentMetadata);
-	const plain = await service.sendMessage(owner, chat.id, { text: "plain" });
-	expect(plain.attachmentMetadata).toBeNull();
-});
+test.each(["image", "video", "audio", "music", "voice", "document"] as const)(
+	"%s attachment metadata preserves file size across reads, forwards, and notifications",
+	async (type) => {
+		const {
+			service,
+			repository,
+			storage,
+			notifications,
+			owner,
+			member,
+			outsider,
+		} = fixture();
+		const chat = await service.createPrivate(owner, member);
+		const media = await repository.createMedia({
+			conversationId: chat.id,
+			uploaderId: owner,
+			type,
+			objectKey: "attachments/clip.mp4",
+			thumbnailKey: "thumbnails/clip.jpg",
+			fileName: "clip.mp4",
+			contentType: "video/mp4",
+			fileSize: 123,
+			width: 64,
+			height: 48,
+			durationSeconds: 1.25,
+		});
+		const sent = await service.sendMessage(owner, chat.id, {
+			attachment: { type, mediaId: media.id },
+		});
+		const metadata = {
+			...media,
+			thumbnailUrl: await storage.getThumbnailUrl(media.thumbnailKey!),
+		};
+		expect(sent.attachmentMetadata).toEqual(metadata);
+		expect(notifications.events.at(-1)?.payload).toMatchObject({
+			message: { attachmentMetadata: metadata },
+		});
+		expect(
+			(await service.listMessages(member, chat.id, 10)).messages[0]
+				.attachmentMetadata,
+		).toEqual(metadata);
+		expect(
+			(await service.getMessage(member, chat.id, sent.id)).attachmentMetadata,
+		).toEqual(metadata);
+		expect(
+			(await service.getFirstMessage(member, chat.id))?.attachmentMetadata,
+		).toEqual(metadata);
+		expect(
+			(await service.getMessagesAround(member, chat.id, sent.id)).message
+				.attachmentMetadata,
+		).toEqual(metadata);
+		const destination = await service.createPrivate(member, outsider);
+		const forwarded = await service.forwardMessage(
+			member,
+			destination.id,
+			sent.id,
+		);
+		if (!forwarded.attachment || forwarded.attachment.type === "gif")
+			throw new Error("Expected a forwarded media attachment");
+		expect(forwarded.attachmentMetadata).toMatchObject({
+			id: forwarded.attachment.mediaId,
+			fileName: media.fileName,
+			fileSize: media.fileSize,
+			width: media.width,
+			thumbnailUrl: metadata.thumbnailUrl,
+		});
+		expect(
+			(await service.listMessages(outsider, destination.id, 10)).messages[0]
+				.attachmentMetadata,
+		).toEqual(forwarded.attachmentMetadata);
+		const plain = await service.sendMessage(owner, chat.id, { text: "plain" });
+		expect(plain.attachmentMetadata).toBeNull();
+	},
+);
 
 test("GIF message metadata includes playable and thumbnail URLs", async () => {
 	const { service, repository, storage, owner, member } = fixture();
