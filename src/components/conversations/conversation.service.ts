@@ -23,6 +23,10 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { HttpError } from "../../lib/http.js";
 import type { ObjectStorage } from "../../lib/object-storage.js";
 import type { Notifications } from "../../realtime/notifications.js";
+import {
+	offlinePresence,
+	type PresenceReader,
+} from "../../realtime/presence-view.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type {
 	Conversation,
@@ -62,6 +66,7 @@ export class ConversationService {
 		private readonly voiceConverter: VoiceConverter = new FfmpegVoiceConverter(),
 		private readonly durationReader: DurationReader = new FfprobeDurationReader(),
 		private readonly musicMetadataReader: MusicMetadataReader = new FfmpegMusicMetadataReader(),
+		private readonly presence: PresenceReader = offlinePresence,
 	) {}
 
 	private publicConversation(conversation: Conversation) {
@@ -194,7 +199,11 @@ export class ConversationService {
 
 	async listMembers(userId: string, conversationId: string) {
 		await this.requireMember(userId, conversationId);
-		return this.repository.listMembers(conversationId);
+		const members = await this.repository.listMembers(conversationId);
+		return members.map(({ lastSeen, ...member }) => ({
+			...member,
+			...this.presence.getPresence(member.userId, lastSeen),
+		}));
 	}
 
 	async createPrivate(userId: string, recipientId: string) {

@@ -1,9 +1,10 @@
 import type { Notifications } from "./notifications.js";
 import type { PresenceRepository } from "./presence.repository.js";
+import type { PresenceReader, UserPresence } from "./presence-view.js";
 
 export const PRESENCE_INTERVAL_MS = 60_000;
 
-export class PresenceService {
+export class PresenceService implements PresenceReader {
 	// Each user appears in exactly one map, with only their latest timestamp.
 	// Map membership records whether the online transition has been announced.
 	private readonly pending = new Map<string, number>();
@@ -19,6 +20,20 @@ export class PresenceService {
 	heartbeat(userId: string) {
 		const target = this.online.has(userId) ? this.online : this.pending;
 		target.set(userId, this.now());
+	}
+
+	getPresence(userId: string, savedLastSeen?: Date | null): UserPresence {
+		const heartbeat = this.online.get(userId) ?? this.pending.get(userId);
+		const saved = savedLastSeen?.getTime();
+		const lastSeen =
+			heartbeat === undefined ? saved : Math.max(heartbeat, saved ?? heartbeat);
+		return {
+			online:
+				heartbeat !== undefined &&
+				this.now() - heartbeat <= PRESENCE_INTERVAL_MS,
+			last_seen:
+				lastSeen === undefined ? null : new Date(lastSeen).toISOString(),
+		};
 	}
 
 	async tick() {

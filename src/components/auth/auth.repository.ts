@@ -11,6 +11,7 @@ export type AuthUser = {
 	avatarKey: string | null;
 	passwordHash: string;
 	createdAt: Date;
+	lastSeen?: Date | null;
 };
 export type RefreshSession = {
 	id: string;

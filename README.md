@@ -150,12 +150,24 @@ Authenticated lookups return basic details for any user:
 		"id": "<user UUID>",
 		"name": "Display name",
 		"username": "some_user",
-		"avatarUrl": "<presigned avatar URL>"
+		"avatarUrl": "<presigned avatar URL>",
+		"online": false,
+		"last_seen": "2026-10-26T12:00:00.000Z"
 	}
 }
 ```
 
 `name` is the display name. `username` and `avatarUrl` are null when unset.
+User responses always include `online` and `last_seen`. The same fields appear
+on every entry returned by `GET /api/conversations/:conversationId/members`,
+and on users returned by sign-up, sign-in, `/api/auth/me`, and profile/avatar
+updates. `last_seen` is an ISO timestamp, or null if no heartbeat is known.
+Reads use the latest in-memory heartbeat immediately, including before the next
+minute flush, and fall back to the saved database timestamp after eviction or a
+restart. Online means a heartbeat arrived within the last 60 seconds in this
+process; a saved timestamp alone does not make a user online. Reads do not write
+to the database or send presence notifications.
+
 Avatar URLs can be used directly by image clients and expire after 15 minutes;
 fetch the profile again to refresh them. `S3_ENDPOINT` must be reachable from the
 client using the URL. Responses exclude email addresses, password hashes, and

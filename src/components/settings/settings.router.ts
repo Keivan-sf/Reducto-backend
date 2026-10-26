@@ -5,6 +5,10 @@ import { validateBody } from "../../lib/http.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import type { AuthService } from "../auth/auth.service.js";
 import {
+	offlinePresence,
+	type PresenceReader,
+} from "../../realtime/presence-view.js";
+import {
 	MAX_AVATAR_SIZE_BYTES,
 	type SettingsService,
 } from "./settings.service.js";
@@ -32,6 +36,7 @@ const upload = multer({
 export function createSettingsRouter(
 	authService: AuthService,
 	settingsService: SettingsService,
+	presence: PresenceReader = offlinePresence,
 ) {
 	const router = Router();
 	router.patch(
@@ -44,7 +49,10 @@ export function createSettingsRouter(
 					request.auth!.userId,
 					request.body,
 				);
-				response.json({ user });
+				const { lastSeen, ...details } = user;
+				response.json({
+					user: { ...details, ...presence.getPresence(user.id, lastSeen) },
+				});
 			} catch (error) {
 				next(error);
 			}
@@ -64,7 +72,10 @@ export function createSettingsRouter(
 					request.auth!.userId,
 					request.file,
 				);
-				response.json({ user });
+				const { lastSeen, ...details } = user;
+				response.json({
+					user: { ...details, ...presence.getPresence(user.id, lastSeen) },
+				});
 			} catch (error) {
 				next(error);
 			}

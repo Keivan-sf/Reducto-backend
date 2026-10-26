@@ -19,6 +19,10 @@ import {
 import type { UserService } from "./components/users/user.service.js";
 import { createUserRouter } from "./components/users/user.router.js";
 import { userPaths, userSchemas } from "./components/users/user.openapi.js";
+import {
+	offlinePresence,
+	type PresenceReader,
+} from "./realtime/presence-view.js";
 
 export function createApp(
 	authService: AuthService,
@@ -26,6 +30,7 @@ export function createApp(
 	gifService: GifService,
 	conversationService: ConversationService,
 	userService: UserService,
+	presence: PresenceReader = offlinePresence,
 ) {
 	const app = express();
 	app.use(cors(corsOptions));
@@ -70,9 +75,12 @@ export function createApp(
 			},
 		}),
 	);
-	app.use("/api/auth", createAuthRouter(authService));
+	app.use("/api/auth", createAuthRouter(authService, presence));
 	app.use("/api/users", createUserRouter(authService, userService));
-	app.use("/api/settings", createSettingsRouter(authService, settingsService));
+	app.use(
+		"/api/settings",
+		createSettingsRouter(authService, settingsService, presence),
+	);
 	app.use("/api/gifs", createGifRouter(authService, gifService));
 	app.use(
 		"/api/conversations",

@@ -49,6 +49,10 @@ const objectStorage = new S3ObjectStorage({
 });
 const io = new Server();
 const notifications = new SocketNotifications(io);
+const presence = new PresenceService(
+	new DrizzlePresenceRepository(database),
+	notifications,
+);
 const settingsService = new SettingsService(
 	new DrizzleSettingsRepository(database),
 	objectStorage,
@@ -63,6 +67,12 @@ const conversationService = new ConversationService(
 	new DrizzleConversationRepository(database),
 	objectStorage,
 	notifications,
+	undefined,
+	undefined,
+	undefined,
+	undefined,
+	undefined,
+	presence,
 );
 const server = createServer(
 	createApp(
@@ -70,15 +80,15 @@ const server = createServer(
 		settingsService,
 		gifService,
 		conversationService,
-		new UserService(new DrizzleUserRepository(database), objectStorage),
+		new UserService(
+			new DrizzleUserRepository(database),
+			objectStorage,
+			presence,
+		),
+		presence,
 	),
 );
-attachRealtime(
-	server,
-	authService,
-	io,
-	new PresenceService(new DrizzlePresenceRepository(database), notifications),
-);
+attachRealtime(server, authService, io, presence);
 server.listen(environment.PORT, () =>
 	console.log(`Reducto API listening on port ${environment.PORT}`),
 );

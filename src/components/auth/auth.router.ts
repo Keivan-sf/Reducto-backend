@@ -3,6 +3,10 @@ import { z } from "zod";
 import { validateBody } from "../../lib/http.js";
 import { requireAuth } from "./auth.middleware.js";
 import type { AuthService } from "./auth.service.js";
+import {
+	offlinePresence,
+	type PresenceReader,
+} from "../../realtime/presence-view.js";
 
 export const signUpSchema = z.object({
 	email: z.email(),
@@ -21,14 +25,18 @@ const signInSchema = z.object({
 });
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
 
-function publicUser(user: {
-	id: string;
-	email: string;
-	name: string;
-	username: string | null;
-	avatarKey: string | null;
-	createdAt: Date;
-}) {
+function publicUser(
+	user: {
+		id: string;
+		email: string;
+		name: string;
+		username: string | null;
+		avatarKey: string | null;
+		createdAt: Date;
+		lastSeen?: Date | null;
+	},
+	presence: PresenceReader,
+) {
 	return {
 		id: user.id,
 		email: user.email,
@@ -36,10 +44,14 @@ function publicUser(user: {
 		username: user.username,
 		avatarKey: user.avatarKey,
 		createdAt: user.createdAt,
+		...presence.getPresence(user.id, user.lastSeen),
 	};
 }
 
-export function createAuthRouter(authService: AuthService) {
+export function createAuthRouter(
+	authService: AuthService,
+	presence: PresenceReader = offlinePresence,
+) {
 	const router = Router();
 	router.post(
 		"/sign-up",
@@ -52,7 +64,9 @@ export function createAuthRouter(authService: AuthService) {
 					request.body.name,
 					request.body.username,
 				);
-				response.status(201).json({ user: publicUser(user), ...tokens });
+				response
+					.status(201)
+					.json({ user: publicUser(user, presence), ...tokens });
 			} catch (error) {
 				next(error);
 			}
@@ -67,7 +81,7 @@ export function createAuthRouter(authService: AuthService) {
 					request.body.email,
 					request.body.password,
 				);
-				response.json({ user: publicUser(user), ...tokens });
+				response.json({ user: publicUser(user, presence), ...tokens });
 			} catch (error) {
 				next(error);
 			}
@@ -102,7 +116,7 @@ export function createAuthRouter(authService: AuthService) {
 		async (request, response, next) => {
 			try {
 				const user = await authService.getUser(request.auth!.userId);
-				response.json({ user: publicUser(user) });
+				response.json({ user: publicUser(user, presence) });
 			} catch (error) {
 				next(error);
 			}

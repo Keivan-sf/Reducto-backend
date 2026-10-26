@@ -45,6 +45,8 @@ test("basic details resolve case-insensitive usernames and IDs without exposing 
 		name: record.name,
 		username: record.username,
 		avatarUrl: "https://storage.example/avatars/ada/picture.png?signed=true",
+		online: false,
+		last_seen: null,
 	});
 	expect(await service.getById(record.id)).toEqual(result);
 	expect(urls.keys).toEqual([record.avatarKey, record.avatarKey]);
@@ -64,6 +66,8 @@ test("profiles without an avatar or username return null and missing users retur
 		name: "Ada",
 		username: null,
 		avatarUrl: null,
+		online: false,
+		last_seen: null,
 	});
 	expect(urls.keys).toEqual([]);
 	await expect(service.getById(randomUUID())).rejects.toMatchObject({
@@ -119,6 +123,8 @@ test("profile lookup HTTP routes require authentication and validate lookup para
 			name: record.name,
 			username: record.username,
 			avatarUrl: null,
+			online: false,
+			last_seen: null,
 		});
 		expect(result.headers["cache-control"]).toBe("no-store");
 	}

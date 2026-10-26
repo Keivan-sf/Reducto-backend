@@ -270,10 +270,13 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		});
 	}
 
-	listMembers(conversationId: string) {
-		return this.database.query.conversationMembers.findMany({
-			where: eq(conversationMembers.conversationId, conversationId),
-		});
+	async listMembers(conversationId: string) {
+		const rows = await this.database
+			.select({ member: conversationMembers, lastSeen: users.lastSeen })
+			.from(conversationMembers)
+			.innerJoin(users, eq(users.id, conversationMembers.userId))
+			.where(eq(conversationMembers.conversationId, conversationId));
+		return rows.map(({ member, lastSeen }) => ({ ...member, lastSeen }));
 	}
 
 	async addMember(conversationId: string, userId: string) {

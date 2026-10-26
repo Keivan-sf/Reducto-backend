@@ -8,6 +8,7 @@ export type SettingsUser = {
 	name: string;
 	username: string | null;
 	avatarKey: string | null;
+	lastSeen?: Date | null;
 };
 
 export interface SettingsRepository {

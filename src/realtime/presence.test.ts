@@ -143,3 +143,54 @@ test("a heartbeat during a recipient lookup cancels the stale offline transition
 	await presence.tick();
 	expect(notifications.publish).toHaveBeenCalledTimes(1);
 });
+
+test("presence reads use unflushed heartbeats, expire immediately, and retain saved history after eviction", async () => {
+	const { presence, repository, notifications, advance, now } = setup();
+	const history = new Date(now() - 100_000);
+	expect(presence.getPresence("alice")).toEqual({
+		online: false,
+		last_seen: null,
+	});
+	expect(presence.getPresence("alice", history)).toEqual({
+		online: false,
+		last_seen: history.toISOString(),
+	});
+	presence.heartbeat("alice");
+	const lastSeen = now();
+	expect(presence.getPresence("alice", history)).toEqual({
+		online: true,
+		last_seen: new Date(lastSeen).toISOString(),
+	});
+	expect(repository.saveLastSeen).not.toHaveBeenCalled();
+	expect(notifications.publish).not.toHaveBeenCalled();
+	advance(60_000);
+	expect(presence.getPresence("alice").online).toBe(true);
+	advance(1);
+	expect(presence.getPresence("alice")).toEqual({
+		online: false,
+		last_seen: new Date(lastSeen).toISOString(),
+	});
+	await presence.tick();
+	expect(presence.getPresence("alice", new Date(lastSeen))).toEqual({
+		online: false,
+		last_seen: new Date(lastSeen).toISOString(),
+	});
+});
+
+test("presence reads preserve a newer database timestamp and do not infer online from history", () => {
+	const { presence, now } = setup();
+	const saved = new Date(now() + 1_000);
+	expect(presence.getPresence("alice", saved)).toEqual({
+		online: false,
+		last_seen: saved.toISOString(),
+	});
+	presence.heartbeat("alice");
+	expect(presence.getPresence("alice", saved)).toEqual({
+		online: true,
+		last_seen: saved.toISOString(),
+	});
+	expect(presence.getPresence("unknown", new Date(0))).toEqual({
+		online: false,
+		last_seen: "1970-01-01T00:00:00.000Z",
+	});
+});

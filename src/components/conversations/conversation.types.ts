@@ -24,6 +24,7 @@ export type Member = {
 	role: MemberRole;
 	joinedAt: Date;
 	lastSeenMessageId: string | null;
+	lastSeen?: Date | null;
 };
 export type MediaType =
 	"image" | "video" | "audio" | "music" | "voice" | "document";

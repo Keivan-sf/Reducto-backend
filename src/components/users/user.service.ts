@@ -1,5 +1,9 @@
 import { HttpError } from "../../lib/http.js";
 import type { UserProfileRecord, UserRepository } from "./user.repository.js";
+import {
+	offlinePresence,
+	type PresenceReader,
+} from "../../realtime/presence-view.js";
 
 export interface AvatarUrls {
 	getAvatarUrl(key: string): Promise<string>;
@@ -9,6 +13,7 @@ export class UserService {
 	constructor(
 		private readonly repository: UserRepository,
 		private readonly avatars: AvatarUrls,
+		private readonly presence: PresenceReader = offlinePresence,
 	) {}
 
 	private async basicDetails(user: UserProfileRecord | undefined) {
@@ -20,6 +25,7 @@ export class UserService {
 			avatarUrl: user.avatarKey
 				? await this.avatars.getAvatarUrl(user.avatarKey)
 				: null,
+			...this.presence.getPresence(user.id, user.lastSeen),
 		};
 	}
 

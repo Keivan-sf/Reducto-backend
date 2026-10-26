@@ -7,6 +7,7 @@ export type UserProfileRecord = {
 	name: string;
 	username: string | null;
 	avatarKey: string | null;
+	lastSeen?: Date | null;
 };
 
 export interface UserRepository {
@@ -19,6 +20,7 @@ const profileColumns = {
 	name: users.name,
 	username: users.username,
 	avatarKey: users.avatarKey,
+	lastSeen: users.lastSeen,
 };
 
 export class DrizzleUserRepository implements UserRepository {

@@ -1,8 +1,11 @@
+import { presenceProperties } from "../../realtime/presence.openapi.js";
+
 export const userSchemas = {
 	BasicUser: {
 		type: "object",
-		required: ["id", "name", "username", "avatarUrl"],
+		required: ["id", "name", "username", "avatarUrl", "online", "last_seen"],
 		properties: {
+			...presenceProperties,
 			id: { type: "string", format: "uuid" },
 			name: { type: "string", description: "User's display name" },
 			username: { type: "string", nullable: true },

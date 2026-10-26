@@ -1,4 +1,5 @@
 import { REACTION_EMOJIS } from "./conversation.types.js";
+import { presenceProperties } from "../../realtime/presence.openapi.js";
 
 const uuid = { type: "string", format: "uuid" };
 const reference = (name: string) => ({ $ref: `#/components/schemas/${name}` });
@@ -197,6 +198,7 @@ export const chatSchemas = {
 		["id", "type", "name", "createdAt", "lastSeenMessageId", "unreadCount"],
 	),
 	Member: object({
+		...presenceProperties,
 		conversationId: uuid,
 		userId: uuid,
 		role: { type: "string", enum: ["owner", "admin", "member"] },
