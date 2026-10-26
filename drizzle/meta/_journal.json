@@ -113,6 +113,13 @@
 			"when": 1792846961226,
 			"tag": "0015_whole_skin",
 			"breakpoints": true
+		},
+		{
+			"idx": 16,
+			"version": "7",
+			"when": 1793016806124,
+			"tag": "0016_dazzling_secret_warriors",
+			"breakpoints": true
 		}
 	]
 }

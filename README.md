@@ -407,6 +407,44 @@ API server.
 
 ## Realtime notifications
 
+### Online presence
+
+Run `pnpm run db:migrate` to add nullable `users.last_seen` (existing users start
+with null). Send the single-character Socket.IO event `p` without a payload every
+20–30 seconds while online, including immediately after connecting:
+
+```ts
+socket.on("connect", () => socket.emit("p"));
+const heartbeat = setInterval(() => {
+  if (socket.connected) socket.emit("p");
+}, 25_000);
+socket.on("user.presence", ({ userId, online, last_seen }) => {
+  updatePresence(userId, online, last_seen);
+});
+// Clear the heartbeat interval when disposing the client.
+```
+
+Heartbeats use the authenticated user ID and server receipt time; client payloads
+are ignored. Connecting, disconnecting, and Socket.IO transport ping/pong do not
+change presence. Multiple devices refresh the same user's timestamp.
+
+A single server interval runs every 60 seconds, saves each tracked user's latest
+heartbeat to `users.last_seen` in bounded batches, and emits `user.presence` only
+when the status changes. Its payload is `{ userId, online, last_seen }`, with
+`last_seen` an ISO timestamp of the actual last heartbeat, not the scan time.
+Online transitions wait for the next scan. A user is offline when their last
+heartbeat is more than 60 seconds old; detection typically takes 60–120 seconds
+after the final heartbeat. Events reach only connected other users who currently
+share a private conversation or group, once per recipient socket even when
+several conversations overlap. Events are not queued for disconnected peers.
+
+Each tracked user occupies only an ID/timestamp entry in memory. Successfully
+saved offline entries are removed; database failures retain timestamps for retry.
+Writes happen once per scan, so an abrupt process crash can lose heartbeats since
+the last scan. Tracking is local to one API process and resets on restart; use a
+single API instance for this mechanism. Multiple instances would need shared
+presence tracking and notification routing.
+
 The Socket.IO server shares the API's HTTP port. Connect with an access token:
 
 ```ts

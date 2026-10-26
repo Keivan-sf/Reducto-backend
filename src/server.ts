@@ -16,6 +16,8 @@ import { ConversationService } from "./components/conversations/conversation.ser
 import { attachRealtime, SocketNotifications } from "./realtime/socket.js";
 import { DrizzleUserRepository } from "./components/users/user.repository.js";
 import { UserService } from "./components/users/user.service.js";
+import { DrizzlePresenceRepository } from "./realtime/presence.repository.js";
+import { PresenceService } from "./realtime/presence.js";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -71,7 +73,12 @@ const server = createServer(
 		new UserService(new DrizzleUserRepository(database), objectStorage),
 	),
 );
-attachRealtime(server, authService, io);
+attachRealtime(
+	server,
+	authService,
+	io,
+	new PresenceService(new DrizzlePresenceRepository(database), notifications),
+);
 server.listen(environment.PORT, () =>
 	console.log(`Reducto API listening on port ${environment.PORT}`),
 );
