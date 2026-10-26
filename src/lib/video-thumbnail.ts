@@ -48,7 +48,7 @@ export class FfmpegThumbnailGenerator implements ThumbnailGenerator {
 						"1",
 						outputPath,
 					],
-					{ timeout: 120_000, maxBuffer: 1024 * 1024 },
+					{ maxBuffer: 1024 * 1024 },
 				);
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException).code === "ENOENT")

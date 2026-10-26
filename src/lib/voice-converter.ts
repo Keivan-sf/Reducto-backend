@@ -54,7 +54,7 @@ export class FfmpegVoiceConverter implements VoiceConverter {
 						"ogg",
 						outputPath,
 					],
-					{ timeout: 120_000, maxBuffer: 1024 * 1024 },
+					{ maxBuffer: 1024 * 1024 },
 				);
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException).code === "ENOENT")

@@ -30,7 +30,7 @@ export class FfprobeDurationReader implements DurationReader {
 					"json",
 					path,
 				],
-				{ timeout: 30_000, maxBuffer: 1024 * 1024 },
+				{ maxBuffer: 1024 * 1024 },
 			);
 			const duration = Number(JSON.parse(stdout).format?.duration);
 			if (!Number.isFinite(duration) || duration <= 0)

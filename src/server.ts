@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { createServer } from "node:http";
+import { createHttpServer } from "./lib/http-server.js";
 import { Server } from "socket.io";
 import { createApp } from "./app.js";
 import { createDatabase } from "./db/client.js";
@@ -74,7 +74,7 @@ const conversationService = new ConversationService(
 	undefined,
 	presence,
 );
-const server = createServer(
+const server = createHttpServer(
 	createApp(
 		authService,
 		settingsService,

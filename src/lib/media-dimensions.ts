@@ -66,7 +66,7 @@ export class MediaDimensionReader implements DimensionReader {
 						"json",
 						path,
 					],
-					{ timeout: 30_000, maxBuffer: 1024 * 1024 },
+					{ maxBuffer: 1024 * 1024 },
 				);
 				return videoDimensions(JSON.parse(stdout).streams?.[0] ?? {});
 			} finally {

@@ -48,7 +48,7 @@ export class FfmpegMusicMetadataReader implements MusicMetadataReader {
 					"json",
 					path,
 				],
-				{ timeout: 30_000, maxBuffer: 1024 * 1024 },
+				{ maxBuffer: 1024 * 1024 },
 			);
 			const data: {
 				format?: { tags?: Record<string, string> };
@@ -89,7 +89,7 @@ export class FfmpegMusicMetadataReader implements MusicMetadataReader {
 						"image2pipe",
 						"pipe:1",
 					],
-					{ encoding: "buffer", timeout: 30_000, maxBuffer: 5 * 1024 * 1024 },
+					{ encoding: "buffer", maxBuffer: 5 * 1024 * 1024 },
 				);
 				if (!result.stdout.length)
 					throw new HttpError(400, "Unable to read music cover");
