@@ -27,10 +27,21 @@ export function validateBody<T>(schema: ZodType<T>) {
 
 export function errorHandler(
 	error: unknown,
-	_request: Request,
+	request: Request,
 	response: Response,
 	_next: NextFunction,
 ) {
+	if (
+		request.aborted &&
+		error instanceof Error &&
+		(error.message === "Request aborted" ||
+			error.message === "Request closed" ||
+			("code" in error && error.code === "ECONNRESET") ||
+			("type" in error && error.type === "request.aborted"))
+	) {
+		// The client canceled the request; there is no connection to respond to.
+		return;
+	}
 	if (error instanceof MulterError) {
 		response.status(400).json({
 			error:
