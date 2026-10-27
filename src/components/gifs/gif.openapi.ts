@@ -97,7 +97,7 @@ export const gifPaths = {
 			},
 		},
 		post: {
-			summary: "Upload a GIF or video (max 50 MB), stored as muted MP4",
+			summary: "Upload a GIF or video (max 2 GB), stored as muted MP4",
 			security,
 			requestBody: {
 				required: true,

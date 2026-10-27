@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
 	boolean,
+	bigint,
 	check,
 	integer,
 	doublePrecision,
@@ -50,7 +51,7 @@ export const gifs = pgTable(
 			.references(() => users.id, { onDelete: "restrict" }),
 		objectKey: text("object_key").notNull().unique(),
 		thumbnailKey: text("thumbnail_key"),
-		fileSize: integer("file_size").notNull(),
+		fileSize: bigint("file_size", { mode: "number" }).notNull(),
 		width: integer("width"),
 		height: integer("height"),
 		createdAt: timestamp("created_at", { withTimezone: true })
@@ -164,7 +165,7 @@ export const conversationMedia = pgTable(
 		artist: text("artist"),
 		coverKey: text("cover_key"),
 		contentType: text("content_type").notNull(),
-		fileSize: integer("file_size").notNull(),
+		fileSize: bigint("file_size", { mode: "number" }).notNull(),
 		width: integer("width"),
 		height: integer("height"),
 		durationSeconds: doublePrecision("duration_seconds"),

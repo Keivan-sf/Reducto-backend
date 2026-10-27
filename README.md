@@ -24,7 +24,7 @@ pnpm run dev
 ```
 
 Authenticated `POST /api/gifs` accepts a multipart `gif` field containing a GIF or
-video, up to 50 MB. FFmpeg converts every upload into an H.264 MP4 without audio
+video, up to 2 GB. FFmpeg converts every upload into an H.264 MP4 without audio
 before saving it under `gifs/` in object storage. The database file size refers
 to the converted MP4. Uploads are automatically added to the user's library.
 Existing stored files are not converted retroactively.
@@ -265,7 +265,7 @@ to upload any file as a document, including images, videos, audio, and GIFs.
 This preserves the original bytes, filename, and MIME type without conversion,
 dimension extraction, duration extraction, or thumbnails. Send the resulting
 attachment with `{ "type": "document", "mediaId": "<uploaded attachment UUID>" }`.
-The limit remains 50 MB per file. Animated GIF messages use the existing
+The limit is 2 GB (2,147,483,648 bytes) per file. Animated GIF messages use the existing
 `/api/gifs` upload/conversion flow and are referenced only by GIF ID.
 Uploaders cannot attach another user's file as their own; use forwarding
 to share an existing message. Forwarding checks both conversations and retains
@@ -381,7 +381,7 @@ Audio MIME types, including `audio/ogg;codecs=opus`, and `application/ogg` are
 accepted; FFmpeg validates and decodes the actual audio. The first audio stream
 is converted to mono, 48 kHz Ogg Opus, using speech encoding and a target bitrate
 of 30 kbit/s with variable bitrate enabled. Output size varies with the recording.
-Non-audio streams and source metadata are discarded. The upload limit is 50 MB;
+Non-audio streams and source metadata are discarded. The upload limit is 2 GB;
 empty, corrupt, or undecodable audio is rejected before storage.
 
 The upload response's `attachment` has `type: "voice"`, `contentType: "audio/ogg"`,

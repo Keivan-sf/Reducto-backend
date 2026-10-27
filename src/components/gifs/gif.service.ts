@@ -15,7 +15,7 @@ import { HttpError } from "../../lib/http.js";
 import type { ObjectStorage } from "../../lib/object-storage.js";
 import type { GifRepository, UserGif } from "./gif.repository.js";
 
-export const MAX_GIF_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_GIF_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
 
 export interface GifObjectStorage extends ObjectStorage {
 	getPlaybackUrl(key: string): Promise<string>;
@@ -48,7 +48,7 @@ export class GifService {
 			throw new HttpError(400, "File must be a GIF or video");
 		}
 		if (gif.buffer.length > MAX_GIF_SIZE_BYTES) {
-			throw new HttpError(400, "GIF or video must not exceed 50 MB");
+			throw new HttpError(400, "GIF or video must not exceed 2 GB");
 		}
 		if (!(await this.repository.userExists(userId))) {
 			throw new HttpError(404, "User not found");

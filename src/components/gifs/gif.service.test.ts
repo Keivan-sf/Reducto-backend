@@ -132,7 +132,7 @@ test("video uploads store converted bytes and size", async () => {
 	expect(await service.listGifs("ada-id")).toEqual([gif]);
 });
 
-test("uploads larger than 50 MB are rejected before conversion or storage", async () => {
+test("uploads larger than 2 GB are rejected before conversion or storage", async () => {
 	const storage = new InMemoryObjectStorage();
 	const service = new GifService(
 		new InMemoryGifRepository(new Set(["ada-id"])),
@@ -140,7 +140,7 @@ test("uploads larger than 50 MB are rejected before conversion or storage", asyn
 	);
 	await expect(
 		service.uploadGif("ada-id", {
-			buffer: Buffer.alloc(MAX_GIF_SIZE_BYTES + 1),
+			buffer: { length: MAX_GIF_SIZE_BYTES + 1 } as Buffer,
 			mimetype: "video/mp4",
 		}),
 	).rejects.toMatchObject({ status: 400 });
@@ -228,3 +228,25 @@ test("a playback signing failure does not delete a successfully saved MP4", asyn
 		saved.objectKey,
 	);
 });
+
+// Model large inputs by length so these checks do not allocate gigabytes.
+test.each([50 * 1024 * 1024 + 1, 2 * 1024 * 1024 * 1024])(
+	"GIF uploads of %i bytes pass size validation",
+	async (length) => {
+		const convertToMp4 = jest.fn(async (_input: Buffer): Promise<Buffer> => {
+			throw new Error("conversion reached");
+		});
+		const service = new GifService(
+			new InMemoryGifRepository(new Set(["ada-id"])),
+			new InMemoryObjectStorage(),
+			{ convertToMp4 },
+		);
+		await expect(
+			service.uploadGif("ada-id", {
+				buffer: { length } as Buffer,
+				mimetype: "video/mp4",
+			}),
+		).rejects.toThrow("conversion reached");
+		expect(convertToMp4).toHaveBeenCalledTimes(1);
+	},
+);

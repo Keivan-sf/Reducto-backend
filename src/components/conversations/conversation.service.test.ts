@@ -3,7 +3,10 @@ import { taggedMusic } from "../../lib/music-metadata.test-support.js";
 import { voiceTestWav } from "../../lib/voice-converter.test-support.js";
 import { expect, jest, test } from "@jest/globals";
 import { randomUUID } from "node:crypto";
-import { ConversationService } from "./conversation.service.js";
+import {
+	ConversationService,
+	MAX_ATTACHMENT_SIZE_BYTES,
+} from "./conversation.service.js";
 import {
 	MemoryChatStorage,
 	MemoryConversationRepository,
@@ -1351,7 +1354,7 @@ test("voice uploads enforce membership, size limits, valid audio, and clean up f
 		service.uploadAttachment(
 			owner,
 			chat.id,
-			{ ...file, buffer: Buffer.alloc(50 * 1024 * 1024 + 1) },
+			{ ...file, buffer: { length: MAX_ATTACHMENT_SIZE_BYTES + 1 } as Buffer },
 			"voice",
 		),
 	).rejects.toMatchObject({ status: 400 });
@@ -1429,5 +1432,138 @@ test.each(["private", "group"] as const)(
 				service.getFirstMessage(member, chat.id),
 			).rejects.toMatchObject({ status: 403 });
 		}
+	},
+);
+
+test("search matches text, filenames, music title and artist across accessible chats with enriched results", async () => {
+	const { service, repository, owner, member, outsider } = fixture();
+	const chat = await service.createGroup(owner, "Search");
+	const other = await service.createGroup(owner, "Other");
+	const hidden = await service.createGroup(outsider, "Hidden");
+	await service.addMember(owner, chat.id, member);
+	const text = await service.sendMessage(owner, chat.id, {
+		text: "A NEEDLE in text",
+	});
+	const document = await service.uploadAttachment(owner, other.id, {
+		buffer: Buffer.from("notes"),
+		mimetype: "text/plain",
+		originalname: "needle-report.txt",
+	});
+	const file = await service.sendMessage(owner, other.id, {
+		attachment: { type: "document", mediaId: document.id },
+	});
+	// Metadata fixture avoids invoking ffmpeg or reading an external file.
+	const music = await repository.createMedia({
+		...repository.media.get(document.id)!,
+		type: "music",
+		title: "Needle Song",
+		artist: "Needle Artist",
+		fileName: "track.mp3",
+		durationSeconds: 10,
+	});
+	const song = await service.sendMessage(owner, other.id, {
+		attachment: { type: "music", mediaId: music.id },
+	});
+	await service.sendMessage(outsider, hidden.id, { text: "needle hidden" });
+	await service.sendMessage(owner, chat.id, { text: "unrelated" });
+	await service.react(member, chat.id, text.id, "👍");
+	const result = await service.searchMessages(owner, "needle", 50);
+	expect(result.messages.map((message) => message.id).sort()).toEqual(
+		[text.id, file.id, song.id].sort(),
+	);
+	expect(result.nextCursor).toBeNull();
+	expect(
+		result.messages.find((message) => message.id === text.id)?.reactions,
+	).toHaveLength(1);
+	expect(
+		result.messages.find((message) => message.id === file.id)
+			?.attachmentMetadata,
+	).toMatchObject({ fileName: "needle-report.txt" });
+	for (const query of ["needle song", "NEEDLE ARTIST", "track.mp3"]) {
+		expect(
+			(await service.searchMessages(owner, query, 50)).messages.map(
+				(message) => message.id,
+			),
+		).toEqual([song.id]);
+	}
+	expect(
+		(
+			await service.searchMessages(owner, "needle", 50, undefined, chat.id)
+		).messages.map((message) => message.id),
+	).toEqual([text.id]);
+	expect(
+		(await service.searchMessages(member, "needle", 50)).messages.map(
+			(message) => message.id,
+		),
+	).toEqual([text.id]);
+	await service.removeMember(owner, chat.id, member);
+	expect((await service.searchMessages(member, "needle", 50)).messages).toEqual(
+		[],
+	);
+	await expect(
+		service.searchMessages(member, "needle", 50, undefined, chat.id),
+	).rejects.toMatchObject({ status: 403 });
+});
+
+test("search pagination handles tied timestamps, literal metacharacters and inaccessible cursors", async () => {
+	const { service, repository, owner, outsider } = fixture();
+	const chat = await service.createGroup(owner, "Search");
+	const other = await service.createGroup(owner, "Other");
+	const hidden = await service.createGroup(outsider, "Hidden");
+	const ids: string[] = [];
+	for (const conversationId of [chat.id, other.id, chat.id]) {
+		const message = await service.sendMessage(owner, conversationId, {
+			text: "100%_\\literal",
+		});
+		repository.messages.get(message.id)!.createdAt = new Date(1000);
+		ids.push(message.id);
+	}
+	ids.sort().reverse();
+	let cursor: string | undefined;
+	const found: string[] = [];
+	for (let index = 0; index < 3; index++) {
+		const page = await service.searchMessages(owner, "%_\\", 1, cursor);
+		found.push(page.messages[0]!.id);
+		if (index < 2) expect(page.nextCursor).toBe(page.messages[0]!.id);
+		else expect(page.nextCursor).toBeNull();
+		cursor = page.nextCursor ?? undefined;
+	}
+	expect(found).toEqual(ids);
+	expect((await service.searchMessages(owner, "absent", 50)).messages).toEqual(
+		[],
+	);
+	const privateMessage = await service.sendMessage(outsider, hidden.id, {
+		text: "secret",
+	});
+	for (const id of [privateMessage.id, randomUUID()]) {
+		await expect(
+			service.searchMessages(owner, "literal", 50, id),
+		).rejects.toMatchObject({ status: 400 });
+	}
+	const wrongChat = [...repository.messages.values()].find(
+		(message) => message.conversationId === other.id,
+	)!;
+	await expect(
+		service.searchMessages(owner, "literal", 50, wrongChat.id, chat.id),
+	).rejects.toMatchObject({ status: 400 });
+});
+
+// Storage is mocked, so boundary checks do not allocate gigabytes.
+test.each([50 * 1024 * 1024 + 1, 2 * 1024 * 1024 * 1024])(
+	"document uploads of %i bytes are accepted and preserve file size",
+	async (length) => {
+		const { service, owner, member } = fixture();
+		const chat = await service.createPrivate(owner, member);
+		const media = await service.uploadAttachment(
+			owner,
+			chat.id,
+			{
+				buffer: { length } as Buffer,
+				mimetype: "application/octet-stream",
+				originalname: "large.bin",
+			},
+			"document",
+		);
+		expect(media.fileSize).toBe(length);
 	},
 );

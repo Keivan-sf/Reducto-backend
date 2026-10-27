@@ -902,3 +902,73 @@ test("HTTP first-message lookup handles empty history and preserves ordinary mes
 		.auth(alice.tokens.accessToken, { type: "bearer" })
 		.expect(400);
 });
+
+test("HTTP search validates queries, authenticates, scopes results and paginates", async () => {
+	const { app, alice, bob, outsider, repository } = await fixture();
+	const sent = await request(app)
+		.post(`/api/conversations/private/${bob.user.id}/messages`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ text: "Searchable text" })
+		.expect(201);
+	const message = sent.body.message;
+	const scoped = `/api/conversations/${message.conversationId}/messages/search`;
+	for (const path of ["/api/conversations/search", scoped]) {
+		await request(app).get(path).query({ q: "search" }).expect(401);
+		const result = await request(app)
+			.get(path)
+			.query({ q: "  SEARCH  ", limit: 1 })
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.expect(200);
+		expect(result.body.messages.map((item: { id: string }) => item.id)).toEqual(
+			[message.id],
+		);
+		expect(result.body.nextCursor).toBeNull();
+		for (const query of [
+			{},
+			{ q: " " },
+			{ q: "x".repeat(1001) },
+			{ q: ["a", "b"] },
+			{ q: "a", limit: 0 },
+			{ q: "a", limit: 101 },
+			{ q: "a", limit: 1.5 },
+			{ q: "a", before: "bad" },
+			{ q: "a", userId: bob.user.id },
+		]) {
+			await request(app)
+				.get(path)
+				.query(query)
+				.auth(alice.tokens.accessToken, { type: "bearer" })
+				.expect(400);
+		}
+	}
+	await request(app)
+		.get(scoped)
+		.query({ q: "search" })
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(403);
+	const empty = await request(app)
+		.get("/api/conversations/search")
+		.query({ q: "search" })
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(empty.body).toEqual({ messages: [], nextCursor: null });
+	repository.messages.get(message.id)!.createdAt = new Date(1000);
+	const second = await request(app)
+		.post(`/api/conversations/${message.conversationId}/messages`)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ text: "search again" })
+		.expect(201);
+	const firstPage = await request(app)
+		.get("/api/conversations/search")
+		.query({ q: "search", limit: 1 })
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(firstPage.body.nextCursor).toBe(second.body.message.id);
+	const next = await request(app)
+		.get("/api/conversations/search")
+		.query({ q: "search", limit: 1, before: firstPage.body.nextCursor })
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.expect(200);
+	expect(next.body.messages[0].id).toBe(message.id);
+	expect(next.body.nextCursor).toBeNull();
+});

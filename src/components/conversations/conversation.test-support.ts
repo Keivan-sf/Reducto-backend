@@ -254,6 +254,44 @@ export class MemoryConversationRepository implements ConversationRepository {
 					(first.id < second.id ? -1 : first.id > second.id ? 1 : 0),
 			)[0];
 	}
+	async searchMessages(
+		userId: string,
+		query: string,
+		limit: number,
+		before?: Message,
+		conversationId?: string,
+	) {
+		return [...this.messages.values()]
+			.filter((message) => {
+				if (
+					!this.members.has(`${message.conversationId}:${userId}`) ||
+					(conversationId && message.conversationId !== conversationId)
+				)
+					return false;
+				if (
+					before &&
+					!(
+						message.createdAt < before.createdAt ||
+						(+message.createdAt === +before.createdAt && message.id < before.id)
+					)
+				)
+					return false;
+				const media =
+					message.attachment && message.attachment.type !== "gif"
+						? this.media.get(message.attachment.mediaId)
+						: undefined;
+				const fields = [
+					message.text,
+					media?.fileName,
+					...(media?.type === "music" ? [media.title, media.artist] : []),
+				];
+				return fields.some((field) =>
+					field?.toLowerCase().includes(query.toLowerCase()),
+				);
+			})
+			.sort((a, b) => +b.createdAt - +a.createdAt || (a.id < b.id ? 1 : -1))
+			.slice(0, limit);
+	}
 	async listMessages(conversationId: string, limit: number, before?: Message) {
 		return [...this.messages.values()]
 			.filter(

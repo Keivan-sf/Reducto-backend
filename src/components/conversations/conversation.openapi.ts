@@ -251,7 +251,52 @@ const privateRecipientBody = { oneOf: [userBody, object({ username })] };
 const messageResult = object({ message: reference("Message") });
 const conversationResult = object({ conversation: reference("Conversation") });
 
+const searchParameters = [
+	{
+		name: "q",
+		in: "query",
+		required: true,
+		schema: { type: "string", minLength: 1, maxLength: 1000 },
+		description:
+			"Trimmed, case-insensitive literal substring in message text, attachment filename, music title, or artist.",
+	},
+	{
+		name: "limit",
+		in: "query",
+		schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+	},
+	{
+		name: "before",
+		in: "query",
+		schema: uuid,
+		description:
+			"Message cursor from nextCursor; use the same query and scope for subsequent pages.",
+	},
+];
+const searchResult = object({
+	messages: { type: "array", items: reference("Message") },
+	nextCursor: { ...uuid, nullable: true },
+});
+
 export const chatPaths = {
+	"/api/conversations/search": {
+		get: operation(
+			"Search messages in all conversations I currently belong to, newest first",
+			200,
+			undefined,
+			searchParameters,
+			searchResult,
+		),
+	},
+	"/api/conversations/{conversationId}/messages/search": {
+		get: operation(
+			"Search messages in a conversation I belong to, newest first",
+			200,
+			undefined,
+			[...conversationParams, ...searchParameters],
+			searchResult,
+		),
+	},
 	"/api/conversations/{conversationId}/messages/first": {
 		get: operation(
 			"Get the oldest message, including reactions; null for an empty conversation",
@@ -451,7 +496,7 @@ export const chatPaths = {
 	"/api/conversations/{conversationId}/attachments": {
 		post: {
 			...operation(
-				"Upload one attachment (max 50 MB); animated GIF messages use /api/gifs",
+				"Upload one attachment (max 2 GB); animated GIF messages use /api/gifs",
 				201,
 				undefined,
 				conversationParams,

@@ -49,7 +49,7 @@ import {
 	aroundMessagesSchema,
 } from "./conversation.validation.js";
 
-export const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_ATTACHMENT_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
 export interface ChatObjectStorage extends ObjectStorage {
 	getObject(key: string): Promise<Buffer>;
 	getThumbnailUrl(key: string): Promise<string>;
@@ -537,6 +537,47 @@ export class ConversationService {
 		};
 	}
 
+	async searchMessages(
+		userId: string,
+		query: string,
+		limit: number,
+		beforeId?: string,
+		conversationId?: string,
+	): Promise<MessagePage> {
+		if (conversationId) await this.requireMember(userId, conversationId);
+		let before: Message | undefined;
+		if (beforeId) {
+			before = await this.repository.getMessage(beforeId);
+			if (
+				!before ||
+				(conversationId && before.conversationId !== conversationId) ||
+				!(await this.repository.getMember(before.conversationId, userId))
+			)
+				throw new HttpError(400, "Invalid message cursor");
+		}
+		const records = await this.repository.searchMessages(
+			userId,
+			query,
+			limit + 1,
+			before,
+			conversationId,
+		);
+		const page = records.slice(0, limit);
+		const [reactions, enriched] = await Promise.all([
+			this.repository.listReactions(page.map((message) => message.id)),
+			this.withAttachmentMetadata(page),
+		]);
+		return {
+			messages: enriched.map((message) => ({
+				...message,
+				reactions: reactions.filter(
+					(reaction) => reaction.messageId === message.id,
+				),
+			})),
+			nextCursor: records.length > limit ? page.at(-1)!.id : null,
+		};
+	}
+
 	async listMessages(
 		userId: string,
 		conversationId: string,
@@ -683,7 +724,7 @@ export class ConversationService {
 	) {
 		await this.requireMember(userId, conversationId);
 		if (!file.buffer.length || file.buffer.length > MAX_ATTACHMENT_SIZE_BYTES)
-			throw new HttpError(400, "Attachments must be between 1 byte and 50 MB");
+			throw new HttpError(400, "Attachments must be between 1 byte and 2 GB");
 		let contentType = file.mimetype;
 		let body = file.buffer;
 		let fileName = file.originalname;
@@ -709,7 +750,7 @@ export class ConversationService {
 			if (!body.length || body.length > MAX_ATTACHMENT_SIZE_BYTES)
 				throw new HttpError(
 					400,
-					"Converted voice messages must be between 1 byte and 50 MB",
+					"Converted voice messages must be between 1 byte and 2 GB",
 				);
 			type = "voice";
 			contentType = "audio/ogg";

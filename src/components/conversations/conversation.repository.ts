@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	ilike,
+	gt,
+	inArray,
+	lt,
+	or,
+	sql,
+} from "drizzle-orm";
 import type { createDatabase } from "../../db/client.js";
 import {
 	conversationMedia,
@@ -78,6 +89,13 @@ export interface ConversationRepository {
 		text: string,
 	): Promise<Message | undefined>;
 	getFirstMessage(conversationId: string): Promise<Message | undefined>;
+	searchMessages(
+		userId: string,
+		query: string,
+		limit: number,
+		before?: Message,
+		conversationId?: string,
+	): Promise<Message[]>;
 	listMessages(
 		conversationId: string,
 		limit: number,
@@ -430,6 +448,55 @@ export class DrizzleConversationRepository implements ConversationRepository {
 			where: eq(messages.conversationId, conversationId),
 			orderBy: [asc(messages.createdAt), asc(messages.id)],
 		});
+	}
+
+	async searchMessages(
+		userId: string,
+		query: string,
+		limit: number,
+		before?: Message,
+		conversationId?: string,
+	) {
+		// Escape LIKE metacharacters so the query is always literal text.
+		const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+		const rows = await this.database
+			.select({ message: messages })
+			.from(messages)
+			.innerJoin(
+				conversationMembers,
+				and(
+					eq(conversationMembers.conversationId, messages.conversationId),
+					eq(conversationMembers.userId, userId),
+				),
+			)
+			.leftJoin(
+				conversationMedia,
+				sql`${conversationMedia.id}::text = ${messages.attachment}->>'mediaId'`,
+			)
+			.where(
+				and(
+					conversationId
+						? eq(messages.conversationId, conversationId)
+						: undefined,
+					or(
+						ilike(messages.text, pattern),
+						ilike(conversationMedia.fileName, pattern),
+						and(
+							eq(conversationMedia.type, "music"),
+							or(
+								ilike(conversationMedia.title, pattern),
+								ilike(conversationMedia.artist, pattern),
+							),
+						),
+					),
+					before
+						? sql`(${messages.createdAt}, ${messages.id}) < (select created_at, id from messages where id = ${before.id})`
+						: undefined,
+				),
+			)
+			.orderBy(desc(messages.createdAt), desc(messages.id))
+			.limit(limit);
+		return rows.map((row) => row.message);
 	}
 
 	listMessages(conversationId: string, limit: number, before?: Message) {

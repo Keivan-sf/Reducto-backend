@@ -55,6 +55,10 @@ export const pageSchema = z
 	})
 	.strict();
 
+export const searchMessagesSchema = pageSchema.extend({
+	q: z.string().trim().min(1).max(1000),
+});
+
 export const aroundMessagesSchema = z
 	.object({
 		before: z.coerce.number().int().min(0).max(100).default(50),

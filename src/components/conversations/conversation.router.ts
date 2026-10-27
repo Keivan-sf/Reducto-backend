@@ -13,6 +13,7 @@ import {
 	type ConversationService,
 } from "./conversation.service.js";
 import {
+	searchMessagesSchema,
 	seenSchema,
 	forwardSchema,
 	messageSchema,
@@ -68,6 +69,35 @@ export function createConversationRouter(
 			response.json({
 				conversations: await service.listConversations(request.auth!.userId),
 			});
+		}),
+	);
+	router.get(
+		"/search",
+		handle(async (request, response) => {
+			const input = parseInput(searchMessagesSchema, request.query);
+			response.json(
+				await service.searchMessages(
+					request.auth!.userId,
+					input.q,
+					input.limit,
+					input.before,
+				),
+			);
+		}),
+	);
+	router.get(
+		"/:conversationId/messages/search",
+		handle(async (request, response) => {
+			const input = parseInput(searchMessagesSchema, request.query);
+			response.json(
+				await service.searchMessages(
+					request.auth!.userId,
+					input.q,
+					input.limit,
+					input.before,
+					String(request.params.conversationId),
+				),
+			);
 		}),
 	);
 	router.post(
