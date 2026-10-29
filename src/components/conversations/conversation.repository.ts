@@ -230,7 +230,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 				and(
 					eq(conversationMembers.userId, userId),
 					or(
-						eq(conversations.type, "group"),
+						inArray(conversations.type, ["group", "saved"]),
 						sql`EXISTS (SELECT 1 FROM messages WHERE messages.conversation_id = conversations.id)`,
 					),
 				),

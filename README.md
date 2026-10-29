@@ -181,13 +181,22 @@ and reflect requested headers, including `Authorization` and `Content-Type`.
 Authentication and conversation membership checks still apply.
 
 All chat and group HTTP endpoints require `Authorization: Bearer <accessToken>`.
+Every account receives one **Saved Messages** conversation at signup. The database
+migration also creates one for existing accounts. It has `type: "saved"` and the
+fixed name `Saved Messages`, and appears in `GET /api/conversations` even before
+any messages are sent. Its only member is the account itself. It cannot be renamed,
+deleted, left, shared by invite, or have its membership or roles changed. Use the
+ordinary conversation endpoints to send text, upload attachments, forward messages,
+and read or search saved history. Clients should hide conversation management
+controls for this type.
+
 Users can only read, send, react, upload, and download in conversations they belong
 to. Group members can read the group's existing history when they join. Removed
 members immediately lose access to future requests and notifications.
 
 | Method       | Endpoint                                                    | Purpose                                                                                           |
 | ------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| GET          | `/api/conversations`                                        | List my private chats and groups                                                                  |
+| GET          | `/api/conversations`                                        | List my private chats, groups, and Saved Messages                                                                  |
 | POST         | `/api/conversations/private`                                | Create/reuse a private chat with `{ "username": "alice" }` or `{ "userId": "..." }` (exactly one) |
 | POST         | `/api/conversations/private/:userId/messages`               | Send a message and create/reuse the chat                                                          |
 | POST         | `/api/conversations/private/by-username/:username/messages` | Send a message by username and create/reuse the chat                                              |

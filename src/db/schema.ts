@@ -89,6 +89,7 @@ export const userGifs = pgTable(
 export const conversationType = pgEnum("conversation_type", [
 	"private",
 	"group",
+	"saved",
 ]);
 export const memberRole = pgEnum("member_role", ["owner", "admin", "member"]);
 export const mediaType = pgEnum("media_type", [
@@ -110,16 +111,28 @@ export const reactionEmoji = pgEnum("reaction_emoji", [
 	"🎉",
 ]);
 
-export const conversations = pgTable("conversations", {
-	id: uuid("id").defaultRandom().primaryKey(),
-	type: conversationType("type").notNull(),
-	name: text("name"),
-	privateKey: text("private_key").unique(),
-	inviteToken: text("invite_token").unique(),
-	createdAt: timestamp("created_at", { withTimezone: true })
-		.defaultNow()
-		.notNull(),
-});
+export const conversations = pgTable(
+	"conversations",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		type: conversationType("type").notNull(),
+		name: text("name"),
+		privateKey: text("private_key").unique(),
+		inviteToken: text("invite_token").unique(),
+		savedMessagesOwnerId: uuid("saved_messages_owner_id")
+			.unique()
+			.references(() => users.id, { onDelete: "restrict" }),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		check(
+			"saved_messages_structure",
+			sql`(${table.type} = 'saved' AND ${table.savedMessagesOwnerId} IS NOT NULL AND ${table.name} IS NOT NULL AND ${table.name} = 'Saved Messages' AND ${table.privateKey} IS NULL AND ${table.inviteToken} IS NULL) OR (${table.type} <> 'saved' AND ${table.savedMessagesOwnerId} IS NULL)`,
+		),
+	],
+);
 
 export const conversationMembers = pgTable(
 	"conversation_members",

@@ -154,7 +154,12 @@ export const chatSchemas = {
 	Conversation: object(
 		{
 			id: uuid,
-			type: { type: "string", enum: ["private", "group"] },
+			type: {
+				type: "string",
+				enum: ["private", "group", "saved"],
+				description:
+					"Saved Messages is created automatically, has only its owner as a member, and cannot be modified or deleted.",
+			},
 			name: { type: "string", nullable: true },
 			createdAt: { type: "string", format: "date-time" },
 			lastSeenMessageId: {
@@ -183,7 +188,12 @@ export const chatSchemas = {
 	ConversationListItem: object(
 		{
 			id: uuid,
-			type: { type: "string", enum: ["private", "group"] },
+			type: {
+				type: "string",
+				enum: ["private", "group", "saved"],
+				description:
+					"Saved Messages is created automatically, has only its owner as a member, and cannot be modified or deleted.",
+			},
 			name: { type: "string", nullable: true },
 			createdAt: { type: "string", format: "date-time" },
 			lastSeenMessageId: { ...uuid, nullable: true },

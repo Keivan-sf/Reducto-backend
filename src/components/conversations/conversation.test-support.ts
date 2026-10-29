@@ -71,6 +71,7 @@ export class MemoryConversationRepository implements ConversationRepository {
 		const conversation: Conversation = {
 			id: randomUUID(),
 			type: "private",
+			savedMessagesOwnerId: null,
 			name: null,
 			privateKey,
 			inviteToken: null,
@@ -84,6 +85,7 @@ export class MemoryConversationRepository implements ConversationRepository {
 		const conversation: Conversation = {
 			id: randomUUID(),
 			type: "group",
+			savedMessagesOwnerId: null,
 			name,
 			privateKey: null,
 			inviteToken,
@@ -109,7 +111,7 @@ export class MemoryConversationRepository implements ConversationRepository {
 			)
 			.filter(
 				(conversation) =>
-					conversation.type === "group" ||
+					conversation.type !== "private" ||
 					[...this.messages.values()].some(
 						(message) => message.conversationId === conversation.id,
 					),

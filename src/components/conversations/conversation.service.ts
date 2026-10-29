@@ -351,7 +351,7 @@ export class ConversationService {
 		const member = await this.requireMember(userId, conversationId);
 		const conversation = await this.repository.getConversation(conversationId);
 		if (conversation?.type !== "group")
-			throw new HttpError(400, "Cannot leave a private conversation");
+			throw new HttpError(400, "Only group conversations can be left");
 		if (member.role === "owner")
 			throw new HttpError(
 				400,

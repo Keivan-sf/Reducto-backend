@@ -12,9 +12,10 @@ export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 export type MemberRole = "owner" | "admin" | "member";
 export type Conversation = {
 	id: string;
-	type: "private" | "group";
+	type: "private" | "group" | "saved";
 	name: string | null;
 	privateKey: string | null;
+	savedMessagesOwnerId: string | null;
 	inviteToken: string | null;
 	createdAt: Date;
 };

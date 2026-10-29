@@ -1,7 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { createDatabase } from "../../db/client.js";
-import { refreshTokens, users } from "../../db/schema.js";
+import {
+	conversations,
+	conversationMembers,
+	refreshTokens,
+	users,
+} from "../../db/schema.js";
+
+import type {
+	Conversation,
+	Member,
+} from "../conversations/conversation.types.js";
 
 export type AuthUser = {
 	id: string;
@@ -24,6 +34,7 @@ export interface AuthRepository {
 	findUserByEmail(email: string): Promise<AuthUser | undefined>;
 	findUserByUsername(username: string): Promise<AuthUser | undefined>;
 	findUserById(id: string): Promise<AuthUser | undefined>;
+	// Creates the user and their permanent Saved Messages conversation atomically.
 	createUser(user: {
 		email: string;
 		name: string;
@@ -40,6 +51,13 @@ export function tokenHash(token: string): string {
 }
 
 export class InMemoryAuthRepository implements AuthRepository {
+	constructor(
+		private readonly savedMessages: {
+			conversations: Map<string, Conversation>;
+			members: Map<string, Member>;
+		} = { conversations: new Map(), members: new Map() },
+	) {}
+
 	private readonly userRecords = new Map<string, AuthUser>();
 	private readonly sessionRecords = new Map<string, RefreshSession>();
 
@@ -72,6 +90,23 @@ export class InMemoryAuthRepository implements AuthRepository {
 			passwordHash,
 			createdAt: new Date(),
 		};
+		const conversation: Conversation = {
+			id: randomUUID(),
+			type: "saved",
+			name: "Saved Messages",
+			savedMessagesOwnerId: user.id,
+			privateKey: null,
+			inviteToken: null,
+			createdAt: user.createdAt,
+		};
+		this.savedMessages.conversations.set(conversation.id, conversation);
+		this.savedMessages.members.set(`${conversation.id}:${user.id}`, {
+			conversationId: conversation.id,
+			userId: user.id,
+			role: "owner",
+			joinedAt: user.createdAt,
+			lastSeenMessageId: null,
+		});
 		this.userRecords.set(user.id, user);
 		return user;
 	}
@@ -109,11 +144,26 @@ export class DrizzleAuthRepository implements AuthRepository {
 	}
 
 	async createUser(user: Parameters<AuthRepository["createUser"]>[0]) {
-		const [createdUser] = await this.database
-			.insert(users)
-			.values(user)
-			.returning();
-		return createdUser;
+		return this.database.transaction(async (transaction) => {
+			const [createdUser] = await transaction
+				.insert(users)
+				.values(user)
+				.returning();
+			const [conversation] = await transaction
+				.insert(conversations)
+				.values({
+					type: "saved",
+					name: "Saved Messages",
+					savedMessagesOwnerId: createdUser.id,
+				})
+				.returning();
+			await transaction.insert(conversationMembers).values({
+				conversationId: conversation.id,
+				userId: createdUser.id,
+				role: "owner",
+			});
+			return createdUser;
+		});
 	}
 
 	async createSession(session: RefreshSession) {
