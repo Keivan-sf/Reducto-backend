@@ -1,0 +1,100 @@
+# Include this file inside nginx's http {} context, for example as
+# /etc/nginx/conf.d/reducto.conf. Do not replace the main nginx.conf with it.
+# Requires an existing TLS certificate; see README.md for installation steps.
+
+map $http_upgrade $reducto_connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name reducto.domain.ir;
+
+    # For certbot certonly --webroot -w /var/www/letsencrypt ... and renewals.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        try_files $uri =404;
+    }
+
+    location / {
+        # Preserve HTTP methods/bodies if a client follows the redirect.
+        # Configure clients to use HTTPS directly for uploads and Socket.IO.
+        return 308 https://reducto.domain.ir$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name reducto.domain.ir;
+
+    ssl_certificate /etc/letsencrypt/live/reducto.domain.ir/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/reducto.domain.ir/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:ReductoTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    server_tokens off;
+
+    # No nginx request-body size cap. There is no nginx download-size cap.
+    # Application limits still apply: attachments/GIFs 2 GiB, avatars 5 MiB,
+    # JSON bodies 1 MiB. This file does not change those limits.
+    client_max_body_size 0;
+    limit_rate 0;
+
+    # Inactivity limits between I/O operations, not total transfer durations.
+    # Allow slow transfers and silent FFmpeg/S3 work after an upload completes.
+    client_body_timeout 1h;
+    send_timeout 1h;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 1h;
+    proxy_read_timeout 1h;
+
+    # Pass bytes through without staging large uploads/downloads on nginx disk.
+    proxy_http_version 1.1;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    proxy_max_temp_file_size 0;
+    proxy_limit_rate 0;
+    proxy_cache off;
+    proxy_next_upstream off;
+
+    location / {
+        # No URI suffix: preserve /api, /socket.io/, /health, and /openapi.json.
+        proxy_pass http://127.0.0.1:3303;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # This example assumes nginx is the public-facing proxy.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # Support both Socket.IO polling and WebSocket upgrades on /socket.io/.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $reducto_connection_upgrade;
+
+        # Express/Socket.IO already handle CORS, OPTIONS, and authentication.
+        # Forward their responses without adding duplicate CORS headers.
+    }
+
+    # OPTIONAL: expose local MinIO's S3 API on the same HTTPS domain.
+    # Enable this block ONLY if S3_BUCKET=reducto and MinIO uses port 9000.
+    # Set S3_ENDPOINT=https://reducto.domain.ir (no bucket/path suffix), restart
+    # the API, and ensure the API server can reach this public endpoint too.
+    # Use your actual bucket in the location if it is not named "reducto".
+    # Preserve the complete path, query, and Host for presigned S3 signatures.
+    # Do not expose MinIO's console (9001) or make the bucket public.
+    # location ^~ /reducto/ {
+    #     proxy_pass http://127.0.0.1:9000;
+    #     proxy_set_header Host $http_host;
+    #     proxy_set_header X-Real-IP $remote_addr;
+    #     proxy_set_header X-Forwarded-For $remote_addr;
+    #     proxy_set_header X-Forwarded-Proto $scheme;
+    #     proxy_set_header Connection "";
+    #     # Signed URLs contain temporary access credentials in their queries.
+    #     access_log off;
+    # }
+}
