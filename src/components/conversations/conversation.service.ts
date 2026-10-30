@@ -298,6 +298,19 @@ export class ConversationService {
 		});
 	}
 
+	async addMemberByUsername(
+		userId: string,
+		conversationId: string,
+		username: string,
+	) {
+		await this.requireGroupManager(userId, conversationId);
+		await this.addMember(
+			userId,
+			conversationId,
+			await this.resolveUsername(username),
+		);
+	}
+
 	async addMember(userId: string, conversationId: string, targetId: string) {
 		await this.requireGroupManager(userId, conversationId);
 		if (!(await this.repository.userExists(targetId)))

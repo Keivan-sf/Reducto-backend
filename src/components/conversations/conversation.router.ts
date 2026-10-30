@@ -21,7 +21,7 @@ import {
 	pageSchema,
 	parseInput,
 	reactionSchema,
-	privateRecipientSchema,
+	userRecipientSchema,
 	usernameSchema,
 	aroundMessagesSchema,
 } from "./conversation.validation.js";
@@ -103,7 +103,7 @@ export function createConversationRouter(
 	router.post(
 		"/private",
 		handle(async (request, response) => {
-			const input = parseInput(privateRecipientSchema, request.body);
+			const input = parseInput(userRecipientSchema, request.body);
 			response.status(200).json({
 				conversation:
 					"username" in input

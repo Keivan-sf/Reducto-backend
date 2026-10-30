@@ -35,7 +35,7 @@ export const usernameSchema = z
 	.max(32)
 	.regex(/^[A-Za-z0-9_]+$/)
 	.toLowerCase();
-export const privateRecipientSchema = z.union([
+export const userRecipientSchema = z.union([
 	userSchema,
 	z.object({ username: usernameSchema }).strict(),
 ]);

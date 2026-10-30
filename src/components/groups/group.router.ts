@@ -11,7 +11,7 @@ import {
 	groupSchema,
 	parseInput,
 	roleSchema,
-	userSchema,
+	userRecipientSchema,
 } from "../conversations/conversation.validation.js";
 
 export function createGroupRouter(
@@ -70,12 +70,20 @@ export function createGroupRouter(
 	router.post(
 		"/:conversationId/members",
 		handle(async (request, response) => {
-			const input = parseInput(userSchema, request.body);
-			await service.addMember(
-				request.auth!.userId,
-				String(request.params.conversationId),
-				input.userId,
-			);
+			const input = parseInput(userRecipientSchema, request.body);
+			if ("username" in input) {
+				await service.addMemberByUsername(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					input.username,
+				);
+			} else {
+				await service.addMember(
+					request.auth!.userId,
+					String(request.params.conversationId),
+					input.userId,
+				);
+			}
 			response.status(204).end();
 		}),
 	);

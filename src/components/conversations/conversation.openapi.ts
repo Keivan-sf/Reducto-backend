@@ -257,7 +257,7 @@ const username = {
 	pattern: "^[A-Za-z0-9_]+$",
 	description: "Case-insensitive username",
 };
-const privateRecipientBody = { oneOf: [userBody, object({ username })] };
+const userRecipientBody = { oneOf: [userBody, object({ username })] };
 const messageResult = object({ message: reference("Message") });
 const conversationResult = object({ conversation: reference("Conversation") });
 
@@ -402,7 +402,7 @@ export const chatPaths = {
 		post: operation(
 			"Create or reuse the unique private conversation by user ID or username, without notifications; hidden from lists until a message is sent",
 			200,
-			privateRecipientBody,
+			userRecipientBody,
 			[],
 			conversationResult,
 		),
@@ -597,9 +597,9 @@ export const chatPaths = {
 	},
 	"/api/groups/{conversationId}/members": {
 		post: operation(
-			"Owner/admin: add a member",
+			"Owner/admin: add a member by user ID or case-insensitive username",
 			204,
-			userBody,
+			userRecipientBody,
 			conversationParams,
 		),
 	},

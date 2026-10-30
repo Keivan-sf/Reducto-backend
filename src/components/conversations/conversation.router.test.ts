@@ -54,6 +54,67 @@ async function fixture() {
 	return { app, alice, bob, outsider, storage, repository };
 }
 
+test("HTTP owners and admins can add group members by username with validated bodies", async () => {
+	const { app, alice, bob, outsider, repository } = await fixture();
+	repository.usernames.set("outsider", outsider.user.id);
+	const created = await request(app)
+		.post("/api/groups")
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ name: "Group" })
+		.expect(201);
+	const base = `/api/groups/${created.body.conversation.id}`;
+	const endpoint = `${base}/members`;
+	await request(app).post(endpoint).send({ username: "bob_123" }).expect(401);
+	await request(app)
+		.post(endpoint)
+		.auth(outsider.tokens.accessToken, { type: "bearer" })
+		.send({ username: "bob_123" })
+		.expect(403);
+	for (const body of [
+		{},
+		{ username: "" },
+		{ username: "bad-name" },
+		{ username: "a".repeat(33) },
+		{ username: 123 },
+		{ username: "bob_123", userId: bob.user.id },
+		{ username: "bob_123", extra: true },
+	]) {
+		await request(app)
+			.post(endpoint)
+			.auth(alice.tokens.accessToken, { type: "bearer" })
+			.send(body)
+			.expect(400);
+	}
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "unknown" })
+		.expect(404);
+	await request(app)
+		.post(endpoint)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ username: "BoB_123" })
+		.expect(204);
+	await request(app)
+		.post(endpoint)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ username: "outsider" })
+		.expect(403);
+	await request(app)
+		.patch(`${base}/members/${bob.user.id}`)
+		.auth(alice.tokens.accessToken, { type: "bearer" })
+		.send({ role: "admin" })
+		.expect(204);
+	await request(app)
+		.post(endpoint)
+		.auth(bob.tokens.accessToken, { type: "bearer" })
+		.send({ username: "OUTSIDER" })
+		.expect(204);
+	expect(
+		await repository.getMember(created.body.conversation.id, outsider.user.id),
+	).toMatchObject({ role: "member" });
+});
+
 test("HTTP group mentions are private to the recipient and have an authenticated, validated seen endpoint", async () => {
 	const { app, alice, bob, outsider } = await fixture();
 	const created = await request(app)

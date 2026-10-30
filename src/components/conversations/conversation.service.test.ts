@@ -47,6 +47,62 @@ function fixture() {
 	};
 }
 
+test("owners and admins add members by case-insensitive username with idempotent notifications", async () => {
+	const { service, repository, notifications, owner, admin, member } =
+		fixture();
+	repository.usernames.set("admin_user", admin);
+	repository.usernames.set("member_user", member);
+	const group = await service.createGroup(owner, "Group");
+	await service.addMemberByUsername(owner, group.id, "ADMIN_User");
+	expect(await repository.getMember(group.id, admin)).toMatchObject({
+		role: "member",
+	});
+	await service.setRole(owner, group.id, admin, "admin");
+	notifications.events.length = 0;
+	await service.addMemberByUsername(admin, group.id, "Member_User");
+	expect(await repository.getMember(group.id, member)).toMatchObject({
+		role: "member",
+	});
+	expect(notifications.events).toEqual([
+		{
+			event: "group.member_joined",
+			userIds: expect.arrayContaining([owner, admin, member]),
+			payload: { conversationId: group.id, userId: member },
+		},
+	]);
+	await service.addMemberByUsername(owner, group.id, "MEMBER_USER");
+	expect(notifications.events).toHaveLength(1);
+});
+
+test("adding by username requires group management and rejects unknown or invalid usernames", async () => {
+	const { service, repository, notifications, owner, member, outsider } =
+		fixture();
+	const group = await service.createGroup(owner, "Group");
+	await service.addMember(owner, group.id, member);
+	notifications.events.length = 0;
+	const lookup = jest.spyOn(repository, "findUserIdByUsername");
+	for (const userId of [member, outsider]) {
+		await expect(
+			service.addMemberByUsername(userId, group.id, "unknown"),
+		).rejects.toMatchObject({ status: 403 });
+	}
+	expect(lookup).not.toHaveBeenCalled();
+	await expect(
+		service.addMemberByUsername(owner, group.id, "unknown"),
+	).rejects.toMatchObject({ status: 404 });
+	for (const username of ["", "bad-name", "a".repeat(33)]) {
+		await expect(
+			service.addMemberByUsername(owner, group.id, username),
+		).rejects.toMatchObject({ status: 400 });
+	}
+	const privateChat = await service.createPrivate(owner, outsider);
+	await expect(
+		service.addMemberByUsername(owner, privateChat.id, "unknown"),
+	).rejects.toMatchObject({ status: 400 });
+	expect(notifications.events).toEqual([]);
+	expect(await repository.getMember(group.id, outsider)).toBeUndefined();
+});
+
 test("editing changes only text and notifies every current member with the new text", async () => {
 	const { service, repository, notifications, owner, admin, member, outsider } =
 		fixture();
