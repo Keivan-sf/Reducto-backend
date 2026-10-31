@@ -1,15 +1,6 @@
-import {
-	and,
-	asc,
-	desc,
-	eq,
-	ilike,
-	gt,
-	inArray,
-	lt,
-	or,
-	sql,
-} from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import type { MessageEncryption } from "../../lib/message-encryption.js";
+import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import type { createDatabase } from "../../db/client.js";
 import {
 	conversationMedia,
@@ -138,7 +129,21 @@ const unreadCount = sql<number>`(SELECT count(*) FROM messages AS unread
  WHERE id = conversation_members.last_seen_message_id)))`.mapWith(Number);
 
 export class DrizzleConversationRepository implements ConversationRepository {
-	constructor(private readonly database: Database) {}
+	constructor(
+		private readonly database: Database,
+		private readonly encryption: MessageEncryption,
+	) {}
+
+	private decryptMessage<T extends Message | undefined>(message: T): T {
+		return (
+			message && message.text !== null
+				? {
+						...message,
+						text: this.encryption.decrypt(message.text, message.id),
+					}
+				: message
+		) as T;
+	}
 
 	async findUserIdByUsername(username: string) {
 		const [user] = await this.database
@@ -342,9 +347,17 @@ export class DrizzleConversationRepository implements ConversationRepository {
 
 	async createMessage(message: Omit<Message, "id" | "createdAt" | "isEdited">) {
 		return this.database.transaction(async (transaction) => {
+			const id = randomUUID();
 			const [createdMessage] = await transaction
 				.insert(messages)
-				.values(message)
+				.values({
+					...message,
+					id,
+					text:
+						message.text === null
+							? null
+							: this.encryption.encrypt(message.text, id),
+				})
 				.returning();
 			const usernames = mentionedUsernames(message.text);
 			let mentions: Mention[] = [];
@@ -379,7 +392,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 						)
 						.returning();
 			}
-			return { message: createdMessage, mentions };
+			return { message: this.decryptMessage(createdMessage), mentions };
 		});
 	}
 
@@ -417,10 +430,12 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		return mention;
 	}
 
-	getMessage(id: string) {
-		return this.database.query.messages.findFirst({
-			where: eq(messages.id, id),
-		});
+	async getMessage(id: string) {
+		return this.decryptMessage(
+			await this.database.query.messages.findFirst({
+				where: eq(messages.id, id),
+			}),
+		);
 	}
 
 	async updateMessageText(
@@ -431,7 +446,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 	) {
 		const [message] = await this.database
 			.update(messages)
-			.set({ text, isEdited: true })
+			.set({ text: this.encryption.encrypt(text, messageId), isEdited: true })
 			.where(
 				and(
 					eq(messages.id, messageId),
@@ -440,14 +455,16 @@ export class DrizzleConversationRepository implements ConversationRepository {
 				),
 			)
 			.returning();
-		return message;
+		return this.decryptMessage(message);
 	}
 
-	getFirstMessage(conversationId: string) {
-		return this.database.query.messages.findFirst({
-			where: eq(messages.conversationId, conversationId),
-			orderBy: [asc(messages.createdAt), asc(messages.id)],
-		});
+	async getFirstMessage(conversationId: string) {
+		return this.decryptMessage(
+			await this.database.query.messages.findFirst({
+				where: eq(messages.conversationId, conversationId),
+				orderBy: [asc(messages.createdAt), asc(messages.id)],
+			}),
+		);
 	}
 
 	async searchMessages(
@@ -457,53 +474,66 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		before?: Message,
 		conversationId?: string,
 	) {
-		// Escape LIKE metacharacters so the query is always literal text.
-		const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
-		const rows = await this.database
-			.select({ message: messages })
-			.from(messages)
-			.innerJoin(
-				conversationMembers,
-				and(
-					eq(conversationMembers.conversationId, messages.conversationId),
-					eq(conversationMembers.userId, userId),
-				),
-			)
-			.leftJoin(
-				conversationMedia,
-				sql`${conversationMedia.id}::text = ${messages.attachment}->>'mediaId'`,
-			)
-			.where(
-				and(
-					conversationId
-						? eq(messages.conversationId, conversationId)
-						: undefined,
-					or(
-						ilike(messages.text, pattern),
-						ilike(conversationMedia.fileName, pattern),
-						and(
-							eq(conversationMedia.type, "music"),
-							or(
-								ilike(conversationMedia.title, pattern),
-								ilike(conversationMedia.artist, pattern),
-							),
-						),
+		const needle = query.toLowerCase();
+		const found: Message[] = [];
+		let cursor = before;
+		// Ciphertext cannot be searched with LIKE. Keep keys and plaintext in the
+		// application, and scan only authorized rows in bounded memory.
+		while (found.length < limit) {
+			const rows = await this.database
+				.select({
+					message: messages,
+					fileName: conversationMedia.fileName,
+					mediaType: conversationMedia.type,
+					title: conversationMedia.title,
+					artist: conversationMedia.artist,
+				})
+				.from(messages)
+				.innerJoin(
+					conversationMembers,
+					and(
+						eq(conversationMembers.conversationId, messages.conversationId),
+						eq(conversationMembers.userId, userId),
 					),
-					before
-						? sql`(${messages.createdAt}, ${messages.id}) < (select created_at, id from messages where id = ${before.id})`
-						: undefined,
-				),
-			)
-			.orderBy(desc(messages.createdAt), desc(messages.id))
-			.limit(limit);
-		return rows.map((row) => row.message);
+				)
+				.leftJoin(
+					conversationMedia,
+					sql`${conversationMedia.id}::text = ${messages.attachment}->>'mediaId'`,
+				)
+				.where(
+					and(
+						conversationId
+							? eq(messages.conversationId, conversationId)
+							: undefined,
+						cursor
+							? sql`(${messages.createdAt}, ${messages.id}) < (select created_at, id from messages where id = ${cursor.id})`
+							: undefined,
+					),
+				)
+				.orderBy(desc(messages.createdAt), desc(messages.id))
+				.limit(500);
+			for (const row of rows) {
+				const message = this.decryptMessage(row.message);
+				const fields = [
+					message.text,
+					row.fileName,
+					...(row.mediaType === "music" ? [row.title, row.artist] : []),
+				];
+				if (fields.some((value) => value?.toLowerCase().includes(needle)))
+					found.push(message);
+				if (found.length === limit) return found;
+			}
+			if (rows.length < 500) break;
+			cursor = rows[rows.length - 1]!.message;
+		}
+		return found;
 	}
 
-	listMessages(conversationId: string, limit: number, before?: Message) {
+	async listMessages(conversationId: string, limit: number, before?: Message) {
 		const timestamp = before
 			? sql`(select created_at from messages where id = ${before.id})`
 			: undefined;
-		return this.database.query.messages.findMany({
+		const rows = await this.database.query.messages.findMany({
 			where: and(
 				eq(messages.conversationId, conversationId),
 				before
@@ -519,11 +549,16 @@ export class DrizzleConversationRepository implements ConversationRepository {
 			orderBy: [desc(messages.createdAt), desc(messages.id)],
 			limit,
 		});
+		return rows.map((row) => this.decryptMessage(row));
 	}
 
-	listMessagesAfter(conversationId: string, limit: number, after: Message) {
+	async listMessagesAfter(
+		conversationId: string,
+		limit: number,
+		after: Message,
+	) {
 		const timestamp = sql`(select created_at from messages where id = ${after.id})`;
-		return this.database.query.messages.findMany({
+		const rows = await this.database.query.messages.findMany({
 			where: and(
 				eq(messages.conversationId, conversationId),
 				or(
@@ -534,6 +569,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 			orderBy: [asc(messages.createdAt), asc(messages.id)],
 			limit,
 		});
+		return rows.map((row) => this.decryptMessage(row));
 	}
 
 	async createMedia(media: NewMedia) {

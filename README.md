@@ -1,5 +1,52 @@
 # Reducto backend
 
+Message text (including captions) is encrypted in PostgreSQL with AES-256-GCM,
+using a fresh 96-bit nonce and a 128-bit authentication tag for each write. The
+message ID is authenticated too, so ciphertext cannot be moved between messages.
+The implementation uses [Node's crypto API](https://nodejs.org/api/crypto.html).
+Clients continue to send and receive ordinary text over HTTP and Socket.IO.
+
+Set `KEY_SERVER` to an HTTP(S) endpoint returning
+`{"master_key":"your-secret"}` on GET. Use HTTPS outside a trusted local
+connection. Choose a high-entropy random master key, such as 32 random bytes
+encoded as base64. The API fetches it once at startup, keeps it in memory, and
+never writes it to files or logs. A five-second timeout, failed HTTP request,
+redirect, malformed response, or incorrect key causes exit status 1 before the
+API listens. A database salt and an encrypted verification text are stored in
+`message_encryption`; first initialization creates them. Scrypt derives the
+encryption key once during startup, rather than for each message.
+
+For an existing database, stop **all** API instances, back up the database,
+configure `KEY_SERVER`, then run:
+
+```sh
+pnpm run db:migrate
+./scripts/encrypt-messages.sh
+pnpm start
+```
+
+The script prompts for the exact master key returned by your key server without
+echoing it. It reads `DATABASE_URL` from the environment or `.env` and passes the
+key through stdin, without putting it in command arguments, environment variables,
+or temporary files. It initializes/verifies the same verification record and
+encrypts existing non-null message texts in batches within one transaction.
+It locks out concurrent message writes until completion. Failure rolls back all
+changes; reruns verify existing ciphertext and do not encrypt it twice. Text
+starting with the reserved `reducto:v1:` prefix is treated as ciphertext and must
+authenticate successfully. This script does not rotate an existing key.
+
+On an empty database, apply migrations and start normally; the API creates the
+verification record automatically. Startup refuses remaining plaintext messages
+or encrypted messages whose verification record is missing. Keep the master key
+safe: changing or losing it prevents access to existing messages.
+
+Search decrypts authorized messages in batches of 500 in application memory to
+preserve literal substring search without storing a plaintext text index. Searching
+large histories therefore takes longer. Attachment metadata and files are outside
+the scope of message text encryption. This is encryption at rest; authorized API
+clients and the running server can still read message text. Existing database
+backups and PostgreSQL WAL may retain older plaintext after the backfill.
+
 Music uploaded with multipart `kind=music` stores embedded `title` and `artist`
 tags and extracts embedded cover artwork as a JPEG under `covers/attachments/`.
 Upload responses, attachment metadata, message history, forwards, and realtime

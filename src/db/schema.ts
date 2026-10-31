@@ -17,6 +17,16 @@ import {
 	unique,
 } from "drizzle-orm/pg-core";
 
+export const messageEncryption = pgTable(
+	"message_encryption",
+	{
+		id: integer("id").primaryKey(),
+		salt: text("salt").notNull(),
+		verification: text("verification").notNull(),
+	},
+	(table) => [check("message_encryption_singleton", sql`${table.id} = 1`)],
+);
+
 export const users = pgTable("users", {
 	id: uuid("id").defaultRandom().primaryKey(),
 	email: text("email").notNull().unique(),

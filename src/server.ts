@@ -1,3 +1,5 @@
+import { fetchMasterKey } from "./lib/message-encryption.js";
+import { initializeMessageEncryption } from "./db/message-encryption.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { createHttpServer } from "./lib/http-server.js";
@@ -19,76 +21,90 @@ import { UserService } from "./components/users/user.service.js";
 import { DrizzlePresenceRepository } from "./realtime/presence.repository.js";
 import { PresenceService } from "./realtime/presence.js";
 
-if (existsSync(".env")) process.loadEnvFile(".env");
+async function main() {
+	if (existsSync(".env")) process.loadEnvFile(".env");
 
-const environment = z
-	.object({
-		DATABASE_URL: z.string().url(),
-		ACCESS_TOKEN_SECRET: z.string().min(32),
-		REFRESH_TOKEN_SECRET: z.string().min(32),
-		S3_ENDPOINT: z.string().url(),
-		S3_BUCKET: z.string().min(3),
-		S3_ACCESS_KEY: z.string().min(3),
-		S3_SECRET_KEY: z.string().min(8),
-		PORT: z.coerce.number().int().positive().default(3000),
-	})
-	.parse(process.env);
+	const environment = z
+		.object({
+			DATABASE_URL: z.string().url(),
+			KEY_SERVER: z.string().url(),
+			ACCESS_TOKEN_SECRET: z.string().min(32),
+			REFRESH_TOKEN_SECRET: z.string().min(32),
+			S3_ENDPOINT: z.string().url(),
+			S3_BUCKET: z.string().min(3),
+			S3_ACCESS_KEY: z.string().min(3),
+			S3_SECRET_KEY: z.string().min(8),
+			PORT: z.coerce.number().int().positive().default(3000),
+		})
+		.parse(process.env);
 
-const database = createDatabase(environment.DATABASE_URL);
-const authService = new AuthService(new DrizzleAuthRepository(database), {
-	accessTokenSecret: environment.ACCESS_TOKEN_SECRET,
-	refreshTokenSecret: environment.REFRESH_TOKEN_SECRET,
-	accessTokenLifetimeSeconds: 15 * 60,
-	refreshTokenLifetimeSeconds: 30 * 24 * 60 * 60,
-});
-const objectStorage = new S3ObjectStorage({
-	endpoint: environment.S3_ENDPOINT,
-	bucket: environment.S3_BUCKET,
-	accessKeyId: environment.S3_ACCESS_KEY,
-	secretAccessKey: environment.S3_SECRET_KEY,
-});
-const io = new Server();
-const notifications = new SocketNotifications(io);
-const presence = new PresenceService(
-	new DrizzlePresenceRepository(database),
-	notifications,
-);
-const settingsService = new SettingsService(
-	new DrizzleSettingsRepository(database),
-	objectStorage,
-	notifications,
-);
-const gifService = new GifService(
-	new DrizzleGifRepository(database),
-	objectStorage,
-);
+	const masterKey = await fetchMasterKey(environment.KEY_SERVER);
+	const database = createDatabase(environment.DATABASE_URL);
+	const { encryption } = await initializeMessageEncryption(
+		database.$client,
+		masterKey,
+	);
+	const authService = new AuthService(new DrizzleAuthRepository(database), {
+		accessTokenSecret: environment.ACCESS_TOKEN_SECRET,
+		refreshTokenSecret: environment.REFRESH_TOKEN_SECRET,
+		accessTokenLifetimeSeconds: 15 * 60,
+		refreshTokenLifetimeSeconds: 30 * 24 * 60 * 60,
+	});
+	const objectStorage = new S3ObjectStorage({
+		endpoint: environment.S3_ENDPOINT,
+		bucket: environment.S3_BUCKET,
+		accessKeyId: environment.S3_ACCESS_KEY,
+		secretAccessKey: environment.S3_SECRET_KEY,
+	});
+	const io = new Server();
+	const notifications = new SocketNotifications(io);
+	const presence = new PresenceService(
+		new DrizzlePresenceRepository(database),
+		notifications,
+	);
+	const settingsService = new SettingsService(
+		new DrizzleSettingsRepository(database),
+		objectStorage,
+		notifications,
+	);
+	const gifService = new GifService(
+		new DrizzleGifRepository(database),
+		objectStorage,
+	);
 
-const conversationService = new ConversationService(
-	new DrizzleConversationRepository(database),
-	objectStorage,
-	notifications,
-	undefined,
-	undefined,
-	undefined,
-	undefined,
-	undefined,
-	presence,
-);
-const server = createHttpServer(
-	createApp(
-		authService,
-		settingsService,
-		gifService,
-		conversationService,
-		new UserService(
-			new DrizzleUserRepository(database),
-			objectStorage,
+	const conversationService = new ConversationService(
+		new DrizzleConversationRepository(database, encryption),
+		objectStorage,
+		notifications,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		presence,
+	);
+	const server = createHttpServer(
+		createApp(
+			authService,
+			settingsService,
+			gifService,
+			conversationService,
+			new UserService(
+				new DrizzleUserRepository(database),
+				objectStorage,
+				presence,
+			),
 			presence,
 		),
-		presence,
-	),
-);
-attachRealtime(server, authService, io, presence);
-server.listen(environment.PORT, () =>
-	console.log(`Reducto API listening on port ${environment.PORT}`),
-);
+	);
+	attachRealtime(server, authService, io, presence);
+	server.listen(environment.PORT, () =>
+		console.log(`Reducto API listening on port ${environment.PORT}`),
+	);
+}
+void main().catch(() => {
+	console.error(
+		"Startup failed: check configuration, key server, encryption verification, and database migrations/backfill",
+	);
+	process.exit(1);
+});

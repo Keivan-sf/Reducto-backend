@@ -134,6 +134,13 @@
 			"when": 1793284315399,
 			"tag": "0018_saved_messages",
 			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "7",
+			"when": 1793447490416,
+			"tag": "0019_message_encryption",
+			"breakpoints": true
 		}
 	]
 }
