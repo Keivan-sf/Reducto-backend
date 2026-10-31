@@ -1,6 +1,13 @@
 # Reducto backend
 
-Message text (including captions) is encrypted in PostgreSQL with AES-256-GCM,
+Message encryption is enabled only when `MESSAGE_ENCRYPTION=true` (the exact
+lowercase string). When unset or set to another value, the API stores and reads
+plaintext without fetching a key or initializing/verifying encryption records;
+`KEY_SERVER` is not required. The backfill script also exits without prompting
+or changing the database when encryption is disabled. Disabling this setting
+does not decrypt previously encrypted messages; keep it enabled to read them.
+
+When enabled, message text (including captions) is encrypted in PostgreSQL with AES-256-GCM,
 using a fresh 96-bit nonce and a 128-bit authentication tag for each write. The
 message ID is authenticated too, so ciphertext cannot be moved between messages.
 The implementation uses [Node's crypto API](https://nodejs.org/api/crypto.html).
@@ -17,7 +24,7 @@ API listens. A database salt and an encrypted verification text are stored in
 encryption key once during startup, rather than for each message.
 
 For an existing database, stop **all** API instances, back up the database,
-configure `KEY_SERVER`, then run:
+set `MESSAGE_ENCRYPTION=true` and configure `KEY_SERVER`, then run:
 
 ```sh
 pnpm run db:migrate
@@ -35,12 +42,12 @@ changes; reruns verify existing ciphertext and do not encrypt it twice. Text
 starting with the reserved `reducto:v1:` prefix is treated as ciphertext and must
 authenticate successfully. This script does not rotate an existing key.
 
-On an empty database, apply migrations and start normally; the API creates the
+On an empty database with encryption enabled, apply migrations and start normally; the API creates the
 verification record automatically. Startup refuses remaining plaintext messages
 or encrypted messages whose verification record is missing. Keep the master key
 safe: changing or losing it prevents access to existing messages.
 
-Search decrypts authorized messages in batches of 500 in application memory to
+With encryption enabled, search decrypts authorized messages in batches of 500 in application memory to
 preserve literal substring search without storing a plaintext text index. Searching
 large histories therefore takes longer. Attachment metadata and files are outside
 the scope of message text encryption. This is encryption at rest; authorized API

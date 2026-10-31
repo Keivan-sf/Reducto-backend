@@ -4,7 +4,18 @@ import {
 	ENCRYPTED_TEXT_PREFIX,
 	KEY_VERIFICATION_TEXT,
 	MessageEncryption,
+	fetchMasterKey,
 } from "../lib/message-encryption.js";
+
+export async function configureMessageEncryption(
+	pool: Pool,
+	environment: { MESSAGE_ENCRYPTION?: string; KEY_SERVER?: string },
+	request: typeof fetch = fetch,
+) {
+	if (environment.MESSAGE_ENCRYPTION !== "true") return undefined;
+	const masterKey = await fetchMasterKey(environment.KEY_SERVER ?? "", request);
+	return (await initializeMessageEncryption(pool, masterKey)).encryption;
+}
 
 // The sentinel, salt and message updates share a transaction. The lock also
 // serializes first startup across instances and excludes concurrent message writes.

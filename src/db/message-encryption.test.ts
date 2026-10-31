@@ -1,7 +1,51 @@
 import { expect, jest, test } from "@jest/globals";
 import type { Pool } from "pg";
-import { initializeMessageEncryption } from "./message-encryption.js";
+import {
+	configureMessageEncryption,
+	initializeMessageEncryption,
+} from "./message-encryption.js";
 import { ENCRYPTED_TEXT_PREFIX } from "../lib/message-encryption.js";
+
+test.each([undefined, "false", "TRUE", "1", ""])(
+	"encryption flag %s skips key retrieval and database initialization",
+	async (flag) => {
+		const request = jest.fn<typeof fetch>();
+		const connect = jest.fn<Pool["connect"]>();
+		const pool = { connect } as unknown as Pool;
+		await expect(
+			configureMessageEncryption(
+				pool,
+				{ MESSAGE_ENCRYPTION: flag, KEY_SERVER: "invalid url" },
+				request,
+			),
+		).resolves.toBeUndefined();
+		expect(request).not.toHaveBeenCalled();
+		expect(connect).not.toHaveBeenCalled();
+	},
+);
+
+test("true enables key retrieval and verifier initialization; missing key server fails", async () => {
+	const db = fakeDatabase();
+	const request = jest
+		.fn<typeof fetch>()
+		.mockResolvedValue(new Response(JSON.stringify({ master_key: "key" })));
+	expect(
+		await configureMessageEncryption(
+			db.pool,
+			{ MESSAGE_ENCRYPTION: "true", KEY_SERVER: "https://keys.example/key" },
+			request,
+		),
+	).toBeDefined();
+	expect(request).toHaveBeenCalledTimes(1);
+	expect(db.state()).toBeDefined();
+	await expect(
+		configureMessageEncryption(
+			db.pool,
+			{ MESSAGE_ENCRYPTION: "true" },
+			request,
+		),
+	).rejects.toThrow("Master key server unavailable");
+});
 
 function fakeDatabase(initial: { id: string; text: string | null }[] = []) {
 	let state: { salt: string; verification: string } | undefined;

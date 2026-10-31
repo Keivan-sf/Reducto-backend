@@ -4,6 +4,12 @@ import { initializeMessageEncryption } from "./message-encryption.js";
 
 async function main() {
 	if (existsSync(".env")) process.loadEnvFile(".env");
+	if (process.env.MESSAGE_ENCRYPTION !== "true") {
+		console.log(
+			"Message encryption is disabled; set MESSAGE_ENCRYPTION=true to enable it.",
+		);
+		return;
+	}
 	if (!process.env.DATABASE_URL) throw new Error();
 	// Read from stdin, never argv, an environment variable, or a temporary file.
 	let masterKey = "";

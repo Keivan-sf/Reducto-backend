@@ -3,6 +3,11 @@
 set +x
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+encryption_enabled="$(node -e 'if (require("node:fs").existsSync(".env")) process.loadEnvFile(".env"); process.stdout.write(String(process.env.MESSAGE_ENCRYPTION === "true"));')"
+if [[ "$encryption_enabled" != 'true' ]]; then
+  printf 'Message encryption is disabled; set MESSAGE_ENCRYPTION=true to enable it.\n'
+  exit 0
+fi
 master_key=''
 trap 'unset master_key' EXIT
 IFS= read -r -s -p 'Master key: ' master_key </dev/tty

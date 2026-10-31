@@ -3,73 +3,85 @@ import { createDatabase } from "../../db/client.js";
 import { MessageEncryption } from "../../lib/message-encryption.js";
 import { DrizzleConversationRepository } from "./conversation.repository.js";
 
-test("repository encrypts inserts and edits while all message reads return plaintext", async () => {
-	const db = createDatabase("postgres://unused:unused@localhost/unused");
-	const encryption = await MessageEncryption.derive(
-		"test key",
-		Buffer.alloc(16),
-	);
-	const repository = new DrizzleConversationRepository(db, encryption);
-	let stored: unknown[];
-	const query = jest.spyOn(db.$client, "query").mockImplementation((async (
-		_config: unknown,
-		params: unknown[],
-	) => {
-		const sql = (_config as { text: string }).text;
-		if (sql.startsWith("insert")) {
-			stored = [
-				params[0],
-				params[1],
-				params[2],
-				params[3],
-				false,
-				null,
-				null,
-				null,
-				"2026-01-01T00:00:00Z",
-			];
-		} else if (sql.startsWith("update")) {
-			stored[3] = params[0];
-			stored[4] = true;
+test.each([true, false])(
+	"repository uses encryption=%s for inserts and edits while reads return plaintext",
+	async (enabled) => {
+		const db = createDatabase("postgres://unused:unused@localhost/unused");
+		const encryption = enabled
+			? await MessageEncryption.derive("test key", Buffer.alloc(16))
+			: undefined;
+		const repository = new DrizzleConversationRepository(db, encryption);
+		let stored: unknown[];
+		const query = jest.spyOn(db.$client, "query").mockImplementation((async (
+			_config: unknown,
+			params: unknown[],
+		) => {
+			const sql = (_config as { text: string }).text;
+			if (sql.startsWith("insert")) {
+				stored = [
+					params[0],
+					params[1],
+					params[2],
+					params[3],
+					false,
+					null,
+					null,
+					null,
+					"2026-01-01T00:00:00Z",
+				];
+			} else if (sql.startsWith("update")) {
+				stored[3] = params[0];
+				stored[4] = true;
+			}
+			return { rows: [stored!] };
+		}) as never);
+		// Keep transaction tests offline; statements still use real Drizzle mappings.
+		const transaction = jest
+			.spyOn(db, "transaction")
+			.mockImplementation(async (callback) => callback(db as never));
+		try {
+			const { message } = await repository.createMessage({
+				conversationId: "chat",
+				senderId: "sender",
+				text: "hello",
+				attachment: null,
+				forwardedFrom: null,
+				replyToMessageId: null,
+			});
+			expect(message.text).toBe("hello");
+			if (encryption) {
+				expect(stored![3]).not.toBe("hello");
+				expect(encryption.decrypt(stored![3] as string, message.id)).toBe(
+					"hello",
+				);
+			} else expect(stored![3]).toBe("hello");
+			const edited = await repository.updateMessageText(
+				"chat",
+				message.id,
+				"sender",
+				"edited",
+			);
+			expect(edited?.text).toBe("edited");
+			if (encryption)
+				expect(encryption.decrypt(stored![3] as string, message.id)).toBe(
+					"edited",
+				);
+			else expect(stored![3]).toBe("edited");
+			expect((await repository.getMessage(message.id))?.text).toBe("edited");
+			expect((await repository.getFirstMessage("chat"))?.text).toBe("edited");
+			expect((await repository.listMessages("chat", 10))[0]?.text).toBe(
+				"edited",
+			);
+			expect(
+				(await repository.listMessagesAfter("chat", 10, message))[0]?.text,
+			).toBe("edited");
+		} finally {
+			transaction.mockRestore();
+			query.mockRestore();
+			await db.$client.end();
 		}
-		return { rows: [stored!] };
-	}) as never);
-	// Keep transaction tests offline; statements still use real Drizzle mappings.
-	const transaction = jest
-		.spyOn(db, "transaction")
-		.mockImplementation(async (callback) => callback(db as never));
-	try {
-		const { message } = await repository.createMessage({
-			conversationId: "chat",
-			senderId: "sender",
-			text: "hello",
-			attachment: null,
-			forwardedFrom: null,
-			replyToMessageId: null,
-		});
-		expect(message.text).toBe("hello");
-		expect(stored![3]).not.toBe("hello");
-		expect(encryption.decrypt(stored![3] as string, message.id)).toBe("hello");
-		const edited = await repository.updateMessageText(
-			"chat",
-			message.id,
-			"sender",
-			"edited",
-		);
-		expect(edited?.text).toBe("edited");
-		expect(encryption.decrypt(stored![3] as string, message.id)).toBe("edited");
-		expect((await repository.getMessage(message.id))?.text).toBe("edited");
-		expect((await repository.getFirstMessage("chat"))?.text).toBe("edited");
-		expect((await repository.listMessages("chat", 10))[0]?.text).toBe("edited");
-		expect(
-			(await repository.listMessagesAfter("chat", 10, message))[0]?.text,
-		).toBe("edited");
-	} finally {
-		transaction.mockRestore();
-		query.mockRestore();
-		await db.$client.end();
-	}
-});
+	},
+);
 
 test("search decrypts authorized rows across batches and matches text and metadata literally", async () => {
 	const db = createDatabase("postgres://unused:unused@localhost/unused");

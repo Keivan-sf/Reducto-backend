@@ -1,5 +1,4 @@
-import { fetchMasterKey } from "./lib/message-encryption.js";
-import { initializeMessageEncryption } from "./db/message-encryption.js";
+import { configureMessageEncryption } from "./db/message-encryption.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { createHttpServer } from "./lib/http-server.js";
@@ -27,7 +26,8 @@ async function main() {
 	const environment = z
 		.object({
 			DATABASE_URL: z.string().url(),
-			KEY_SERVER: z.string().url(),
+			MESSAGE_ENCRYPTION: z.string().optional(),
+			KEY_SERVER: z.string().optional(),
 			ACCESS_TOKEN_SECRET: z.string().min(32),
 			REFRESH_TOKEN_SECRET: z.string().min(32),
 			S3_ENDPOINT: z.string().url(),
@@ -38,11 +38,10 @@ async function main() {
 		})
 		.parse(process.env);
 
-	const masterKey = await fetchMasterKey(environment.KEY_SERVER);
 	const database = createDatabase(environment.DATABASE_URL);
-	const { encryption } = await initializeMessageEncryption(
+	const encryption = await configureMessageEncryption(
 		database.$client,
-		masterKey,
+		environment,
 	);
 	const authService = new AuthService(new DrizzleAuthRepository(database), {
 		accessTokenSecret: environment.ACCESS_TOKEN_SECRET,

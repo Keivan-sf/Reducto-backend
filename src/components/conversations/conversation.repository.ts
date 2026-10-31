@@ -1,6 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { MessageEncryption } from "../../lib/message-encryption.js";
-import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gt,
+	ilike,
+	inArray,
+	lt,
+	or,
+	sql,
+} from "drizzle-orm";
 import type { createDatabase } from "../../db/client.js";
 import {
 	conversationMedia,
@@ -131,12 +142,12 @@ const unreadCount = sql<number>`(SELECT count(*) FROM messages AS unread
 export class DrizzleConversationRepository implements ConversationRepository {
 	constructor(
 		private readonly database: Database,
-		private readonly encryption: MessageEncryption,
+		private readonly encryption?: MessageEncryption,
 	) {}
 
 	private decryptMessage<T extends Message | undefined>(message: T): T {
 		return (
-			message && message.text !== null
+			message && message.text !== null && this.encryption
 				? {
 						...message,
 						text: this.encryption.decrypt(message.text, message.id),
@@ -356,7 +367,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 					text:
 						message.text === null
 							? null
-							: this.encryption.encrypt(message.text, id),
+							: (this.encryption?.encrypt(message.text, id) ?? message.text),
 				})
 				.returning();
 			const usernames = mentionedUsernames(message.text);
@@ -446,7 +457,10 @@ export class DrizzleConversationRepository implements ConversationRepository {
 	) {
 		const [message] = await this.database
 			.update(messages)
-			.set({ text: this.encryption.encrypt(text, messageId), isEdited: true })
+			.set({
+				text: this.encryption?.encrypt(text, messageId) ?? text,
+				isEdited: true,
+			})
 			.where(
 				and(
 					eq(messages.id, messageId),
@@ -475,6 +489,7 @@ export class DrizzleConversationRepository implements ConversationRepository {
 		conversationId?: string,
 	) {
 		const needle = query.toLowerCase();
+		const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
 		const found: Message[] = [];
 		let cursor = before;
 		// Ciphertext cannot be searched with LIKE. Keep keys and plaintext in the
@@ -502,6 +517,19 @@ export class DrizzleConversationRepository implements ConversationRepository {
 				)
 				.where(
 					and(
+						this.encryption
+							? undefined
+							: or(
+									ilike(messages.text, pattern),
+									ilike(conversationMedia.fileName, pattern),
+									and(
+										eq(conversationMedia.type, "music"),
+										or(
+											ilike(conversationMedia.title, pattern),
+											ilike(conversationMedia.artist, pattern),
+										),
+									),
+								),
 						conversationId
 							? eq(messages.conversationId, conversationId)
 							: undefined,
@@ -511,7 +539,8 @@ export class DrizzleConversationRepository implements ConversationRepository {
 					),
 				)
 				.orderBy(desc(messages.createdAt), desc(messages.id))
-				.limit(500);
+				.limit(this.encryption ? 500 : limit);
+			if (!this.encryption) return rows.map((row) => row.message);
 			for (const row of rows) {
 				const message = this.decryptMessage(row.message);
 				const fields = [
