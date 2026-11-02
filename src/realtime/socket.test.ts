@@ -6,6 +6,10 @@ import { AuthService } from "../components/auth/auth.service.js";
 import { InMemoryAuthRepository } from "../components/auth/auth.repository.js";
 import { attachRealtime, SocketNotifications, userRoom } from "./socket.js";
 import { createToken } from "../lib/jwt.js";
+import {
+	AdminService,
+	CLEANUP_EVENT,
+} from "../components/admin/admin.service.js";
 
 function onceEvent(socket: Socket, event: string): Promise<unknown> {
 	return new Promise((resolve, reject) => {
@@ -81,6 +85,19 @@ test("Socket.IO rejects invalid tokens and delivers notifications only to authen
 		expect(await received).toEqual({ text: "Private" });
 		await barrier;
 		expect(leaked).toEqual([]);
+		const clearedAlice = onceEvent(aliceSocket, CLEANUP_EVENT);
+		const clearedBob = onceEvent(bobSocket, CLEANUP_EVENT);
+		const admin = new AdminService(
+			{ cleanup: async () => ({ deletedMessages: 2, deletedAttachments: 0 }) },
+			{ deleteObject: async () => {} },
+			"admin-password",
+			(event, payload) => {
+				io.emit(event, payload);
+			},
+		);
+		const result = await admin.cleanup("admin-password");
+		expect(await clearedAlice).toEqual(result);
+		expect(await clearedBob).toEqual(result);
 	} finally {
 		for (const client of clients) client.disconnect();
 		await new Promise<void>((resolve) => io.close(() => resolve()));

@@ -1,4 +1,7 @@
 import express from "express";
+import { createAdminRouter } from "./components/admin/admin.router.js";
+import type { AdminService } from "./components/admin/admin.service.js";
+import { adminPaths } from "./components/admin/admin.openapi.js";
 import cors from "cors";
 import { corsOptions } from "./lib/cors.js";
 import { errorHandler } from "./lib/http.js";
@@ -31,6 +34,7 @@ export function createApp(
 	conversationService: ConversationService,
 	userService: UserService,
 	presence: PresenceReader = offlinePresence,
+	adminService?: AdminService,
 ) {
 	const app = express();
 	app.use(cors(corsOptions));
@@ -41,6 +45,7 @@ export function createApp(
 			openapi: "3.0.3",
 			info: { title: "Reducto API", version: "1.0.0" },
 			paths: {
+				...adminPaths,
 				...chatPaths,
 				...userPaths,
 				...gifPaths,
@@ -76,6 +81,7 @@ export function createApp(
 		}),
 	);
 	app.use("/api/auth", createAuthRouter(authService, presence));
+	if (adminService) app.use("/api/admin", createAdminRouter(adminService));
 	app.use("/api/users", createUserRouter(authService, userService));
 	app.use(
 		"/api/settings",

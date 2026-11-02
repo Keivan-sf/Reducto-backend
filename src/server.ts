@@ -1,4 +1,6 @@
 import { configureMessageEncryption } from "./db/message-encryption.js";
+import { DrizzleAdminRepository } from "./components/admin/admin.repository.js";
+import { AdminService } from "./components/admin/admin.service.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { createHttpServer } from "./lib/http-server.js";
@@ -26,6 +28,7 @@ async function main() {
 	const environment = z
 		.object({
 			DATABASE_URL: z.string().url(),
+			ADMIN_PASSWORD: z.string().min(1).optional(),
 			MESSAGE_ENCRYPTION: z.string().optional(),
 			KEY_SERVER: z.string().optional(),
 			ACCESS_TOKEN_SECRET: z.string().min(32),
@@ -94,6 +97,14 @@ async function main() {
 				presence,
 			),
 			presence,
+			new AdminService(
+				new DrizzleAdminRepository(database),
+				objectStorage,
+				environment.ADMIN_PASSWORD,
+				(event, payload) => {
+					io.emit(event, payload);
+				},
+			),
 		),
 	);
 	attachRealtime(server, authService, io, presence);

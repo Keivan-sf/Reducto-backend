@@ -562,5 +562,34 @@ successful saves, and unchanged name/username updates do not emit an event.
 Fetch `/api/users/:userId` on receipt to refresh details and the temporary avatar URL.
 
 Request schemas and endpoint descriptions are available at `/openapi.json`.
+
+To reclaim attachment storage, set `ADMIN_PASSWORD` in the server environment and
+send `POST /api/admin/cleanup` with JSON `{ "password": "your-admin-password" }`.
+The body password is the only authentication; no access token is required. An
+unset password disables this operation (503). Invalid bodies return 400 and an
+incorrect password returns 401.
+
+This deletes all messages (including saved and GIF messages), their reactions and
+mentions, and all registered conversation attachments, including unsent uploads,
+video thumbnails and music covers. It resets members' message read markers.
+Accounts, avatars, refresh tokens, conversations, memberships, GIF records, GIF
+libraries and GIF files remain intact. Files without attachment database records
+are outside this operation's scope.
+
+Message/media/member writes wait while cleanup runs. Files are deleted before the
+database transaction commits. If S3 deletion fails, the request returns 502 and
+database changes roll back; some files may already have been removed. Retry the
+same request to finish cleanup. A database failure also requires retrying. A
+concurrent cleanup in the same process returns 409; database locks serialize
+cleanup across processes.
+
+On success the response is
+`{ "deletedMessages": 123, "deletedAttachments": 45, "completedAt": "ISO timestamp" }`.
+After committing, the server broadcasts `messages.cleared` with that same payload
+to every connected authenticated Socket.IO client. Clients should clear cached
+messages, attachments, read markers and mentions, then reload conversations.
+Disconnected clients should refresh from the API when reconnecting. Broadcasts
+use the configured Socket.IO adapter (the default reaches this API instance).
+
 Tests use in-memory repositories and storage plus temporary localhost HTTP/socket
 servers; they do not contact PostgreSQL, MinIO, or external services.
